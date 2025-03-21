@@ -68,6 +68,8 @@ addopts = """
 """
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+DJANGO_SETTINGS_MODULE = "tests.conftest"
+django_find_project = false
 
 # Type checking configuration
 [tool.mypy]
@@ -198,6 +200,8 @@ ignore = [
 
     # Rule that conflicts with the formatter
     "COM812", # Missing trailing comma in collection of items
+
+    "BLE001", # Allow catching blind exceptions
 ]
 
 # Import organization settings
@@ -235,6 +239,10 @@ section-order = [
     "S108",    # Ignore insecure usage of temporary files
     "SLF001",  # Allow private member access in tests
     "BLE001",  # Allow catching blind exceptions in tests
+]
+
+"django_mcp/management/**/*.py" = [
+    "BLE001",  # Allow catching blind exceptions in management commands
 ]
 
 # Format settings for consistency
