@@ -4,9 +4,10 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-9D00FF.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![Django 4.0+](https://img.shields.io/badge/django-4.0+-FF00FF.svg?style=for-the-badge&logo=django&logoColor=white)](https://www.djangoproject.com/)
-[![License](https://img.shields.io/badge/license-MIT-FF00FF.svg?style=for-the-badge)](LICENSE)
-[![Status](https://img.shields.io/badge/status-beta-39FF14.svg?style=for-the-badge)](docs/plan.md)
-[![Code Style](https://img.shields.io/badge/code_style-black-00FFFF.svg?style=for-the-badge)](https://github.com/psf/black)
+[![License](https://img.shields.io/badge/license-Apache--2.0-FF00FF.svg?style=for-the-badge&logo=apache&logoColor=white)](LICENSE)
+[![Status](https://img.shields.io/badge/status-alpha-FF3366.svg?style=for-the-badge&logo=statuspage&logoColor=white)](docs/plan.md)
+[![Style](https://img.shields.io/badge/code_style-ruff-00FFFF.svg?style=for-the-badge&logo=ruff&logoColor=white)](https://github.com/astral-sh/ruff)
+[![Types](https://img.shields.io/badge/type_checker-mypy-00FF88.svg?style=for-the-badge&logo=python&logoColor=white)](https://mypy-lang.org/)
 
 **Supercharge your Django apps with AI assistant capabilities**
 
@@ -240,7 +241,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## 📝 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the Apache License 2.0 - see the LICENSE file for details.
 
 ---
 
