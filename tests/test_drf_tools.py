@@ -58,7 +58,7 @@ def test_register_drf_viewset(mock_mcp_server, mock_drf_viewset):
     # Need to patch the check since our mock isn't a real ViewSet
     with (
         patch("django_mcp.drf_tools.issubclass", return_value=True),
-        patch("django_mcp.drf_tools.ViewSet", object),
+        patch("django_mcp.drf_tools.DRFViewSet", object),
         patch("django_mcp.drf_tools.DRF_AVAILABLE", True),
     ):
         register_drf_viewset(test_viewset)

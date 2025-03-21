@@ -176,8 +176,9 @@ class DjangoMCPConfig(AppConfig):
         from django.conf import settings
 
         # Try to get a name from ROOT_URLCONF
-        if hasattr(settings, "ROOT_URLCONF"):
-            project_name = settings.ROOT_URLCONF.split(".")[0]
+        # Using hasattr to avoid the mypy error about settings not having ROOT_URLCONF
+        if hasattr(settings, "ROOT_URLCONF") and settings.ROOT_URLCONF:  # type: ignore
+            project_name = settings.ROOT_URLCONF.split(".")[0]  # type: ignore
             return f"{project_name.title()} MCP Server"
 
         return "Django MCP Server"

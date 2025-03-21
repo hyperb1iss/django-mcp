@@ -4,38 +4,45 @@ ASGI integration for Django-MCP.
 This module provides functions to integrate MCP with Django's ASGI application.
 """
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from django.conf import settings
+from django.core.asgi import get_asgi_application as django_get_asgi_application
 
 
-def get_asgi_application() -> Callable:
+def get_asgi_application() -> Callable[
+    [dict[str, Any], Callable[[], Awaitable[dict[str, Any]]], Callable[[dict[str, Any]], Awaitable[None]]],
+    Awaitable[None],
+]:
     """
-    Get Django's ASGI application with MCP mounted.
+    Get the ASGI application.
 
-    This serves as a replacement for Django's get_asgi_application.
+    This wraps Django's get_asgi_application to add MCP support.
 
     Returns:
-        An ASGI application function that routes between Django and MCP
+        The ASGI application
     """
-    from django.core.asgi import get_asgi_application as django_get_asgi_application
-
-    from django_mcp.server import get_sse_app
-
     # Get Django's ASGI application
     django_application = django_get_asgi_application()
 
-    # Get MCP's SSE application
-    mcp_sse_app = get_sse_app()
-
-    # Get MCP URL prefix from settings
+    # Setting for the MCP server
+    # Get this early to avoid circular imports
     mcp_prefix = getattr(settings, "DJANGO_MCP_URL_PREFIX", "mcp")
 
-    async def application(scope: dict[str, Any], receive: Callable, send: Callable) -> None:
+    # Get MCP's SSE application (lazy-loaded to avoid circular imports)
+    from django_mcp.server import get_sse_app
+
+    mcp_sse_app = get_sse_app()
+
+    # Define the ASGI application
+    async def application(
+        scope: dict[str, Any],
+        receive: Callable[[], Awaitable[dict[str, Any]]],
+        send: Callable[[dict[str, Any]], Awaitable[None]],
+    ) -> None:
         """
-        ASGI application that routes MCP SSE requests to the MCP server
-        and all other requests to Django.
+        ASGI application that routes to either Django or MCP.
 
         Args:
             scope: The ASGI scope
@@ -50,7 +57,7 @@ def get_asgi_application() -> Callable:
             await mcp_sse_app(scope, receive, send)
         else:
             # Route to Django
-            await django_application(scope, receive, send)
+            await django_application(scope, receive, send)  # type: ignore
 
     return application
 
@@ -78,6 +85,6 @@ def mount_mcp_in_starlette_app(app: Any) -> Any:
     sse_app = get_sse_app()
 
     # Mount the SSE app
-    app.routes.append(Mount(f"/{mcp_prefix}", app=sse_app))
+    app.routes.append(Mount(f"/{mcp_prefix}", app=sse_app))  # type: ignore
 
     return app

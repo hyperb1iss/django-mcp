@@ -5,14 +5,15 @@ This module provides utilities for exposing Django models as MCP tools and resou
 """
 # pylint: disable=duplicate-code
 
+import json
 from typing import Any
 
 from django.db import models
 from django.db.models import Model, Q
+from django.db.models.manager import Manager
 
 from django_mcp.inspection import (
     get_app_label,
-    get_model_field_names,
     get_model_fields,
     get_model_name,
     get_verbose_name,
@@ -80,12 +81,12 @@ def register_model_get_tool(model: type[Model], prefix: str, **_kwargs: Any) -> 
     Register a tool to get a single model instance by ID.
 
     Args:
-        model: Django model class
+        model: The Django model class
         prefix: Prefix for the tool name
-        **_kwargs: Additional kwargs for tool registration (not used)
+        **_kwargs: Additional keyword arguments
     """
-    mcp_server = get_mcp_server()
     verbose_name = get_verbose_name(model)
+    mcp_server = get_mcp_server()
 
     @mcp_server.tool(description=f"Get a {verbose_name} by ID")
     def get_model_instance(instance_id: int) -> dict[str, Any]:
@@ -95,11 +96,17 @@ def register_model_get_tool(model: type[Model], prefix: str, **_kwargs: Any) -> 
         Args:
             instance_id: The primary key of the {verbose_name} to retrieve
         """
+        # Use correct typing for model manager
+        objects: Any = getattr(model, "objects", None)
+        if not isinstance(objects, Manager):
+            return {"error": "Model does not have a valid objects manager"}
+
         try:
-            instance = model.objects.get(pk=instance_id)
+            instance = objects.get(pk=instance_id)
             return _instance_to_dict(instance)
-        except model.DoesNotExist:
-            return {"error": f"{verbose_name.title()} with ID {instance_id} not found"}
+        except Exception as e:
+            # More generic exception handling to cover DoesNotExist
+            return {"error": f"{verbose_name.title()} with ID {instance_id} not found: {e!s}"}
 
     # Rename the function to avoid name collisions
     get_model_instance.__name__ = f"get_{prefix}_instance"
@@ -110,23 +117,28 @@ def register_model_list_tool(model: type[Model], prefix: str, **_kwargs: Any) ->
     Register a tool to list model instances.
 
     Args:
-        model: Django model class
+        model: The Django model class
         prefix: Prefix for the tool name
-        **_kwargs: Additional kwargs for tool registration (not used)
+        **_kwargs: Additional keyword arguments
     """
-    mcp_server = get_mcp_server()
     verbose_name_plural = get_verbose_name_plural(model)
+    mcp_server = get_mcp_server()
 
     @mcp_server.tool(description=f"List {verbose_name_plural}")
     def list_model_instances(limit: int = 10, offset: int = 0) -> list[dict[str, Any]]:
         """
-        List instances of {verbose_name}.
+        List instances of {verbose_name_plural}.
 
         Args:
             limit: Maximum number of instances to return
-            offset: Number of instances to skip
+            offset: Offset to start from
         """
-        instances = model.objects.all()[offset : offset + limit]
+        # Use correct typing for model manager
+        objects: Any = getattr(model, "objects", None)
+        if not isinstance(objects, Manager):
+            return [{"error": "Model does not have a valid objects manager"}]
+
+        instances = objects.all()[offset : offset + limit]
         return [_instance_to_dict(instance) for instance in instances]
 
     # Rename the function to avoid name collisions
@@ -138,33 +150,34 @@ def register_model_search_tool(model: type[Model], prefix: str, **_kwargs: Any) 
     Register a tool to search model instances.
 
     Args:
-        model: Django model class
+        model: The Django model class
         prefix: Prefix for the tool name
-        **_kwargs: Additional kwargs for tool registration (not used)
+        **_kwargs: Additional keyword arguments
     """
-    mcp_server = get_mcp_server()
     verbose_name_plural = get_verbose_name_plural(model)
+    mcp_server = get_mcp_server()
 
     @mcp_server.tool(description=f"Search for {verbose_name_plural}")
     def search_model_instances(query: str, limit: int = 10) -> list[dict[str, Any]]:
         """
-        Search for {verbose_name} instances by text fields.
+        Search for {verbose_name_plural}.
 
         Args:
             query: Search query
             limit: Maximum number of instances to return
         """
-        # Build Q objects for text fields
+        # Use correct typing for model manager
+        objects: Any = getattr(model, "objects", None)
+        if not isinstance(objects, Manager):
+            return [{"error": "Model does not have a valid objects manager"}]
+
+        # Get searchable fields from model
+        fields = _get_searchable_fields(model)
         q_objects = Q()
-        for field in get_model_fields(model):
-            if isinstance(field, models.CharField | models.TextField):
-                q_objects |= Q(**{f"{field.name}__icontains": query})
+        for field in fields:
+            q_objects |= Q(**{f"{field}__icontains": query})
 
-        # Return empty list if no text fields
-        if not q_objects:
-            return []
-
-        instances = model.objects.filter(q_objects)[:limit]
+        instances = objects.filter(q_objects)[:limit]
         return [_instance_to_dict(instance) for instance in instances]
 
     # Rename the function to avoid name collisions
@@ -173,120 +186,119 @@ def register_model_search_tool(model: type[Model], prefix: str, **_kwargs: Any) 
 
 def register_model_create_tool(model: type[Model], prefix: str, **_kwargs: Any) -> None:
     """
-    Register a tool for creating model instances.
+    Register a tool to create model instances.
 
     Args:
-        model: Django model class
-        prefix: Prefix for tool name
-        **_kwargs: Additional kwargs for tool registration (not used)
+        model: The Django model class
+        prefix: Prefix for the tool name
+        **_kwargs: Additional keyword arguments
     """
-    try:
-        mcp_server = get_mcp_server()
-    except Exception:
-        # Server not initialized yet
-        return
-
-    # Get model info
     verbose_name = get_verbose_name(model)
-    model_name = get_model_name(model)
+    mcp_server = get_mcp_server()
 
-    # Tool name with prefix
-    tool_name = f"{prefix}create_{model_name}" if prefix else f"create_{model_name}"
-
-    # Define the function that creates instances
     @mcp_server.tool(description=f"Create a new {verbose_name}")
     def create_model_instance(**kwargs: Any) -> dict[str, Any]:
         """
-        Create a new model instance.
-
-        Args:
-            **kwargs: Fields for the new instance
-
-        Returns:
-            Dictionary with created instance data
+        Create a new {verbose_name}.
         """
-        # Validate fields - only accept valid model fields
-        valid_fields = set(get_model_field_names(model, exclude_pk=True))
+        # Use correct typing for model manager
+        objects: Any = getattr(model, "objects", None)
+        if not isinstance(objects, Manager):
+            return {"error": "Model does not have a valid objects manager"}
 
-        # Filter out invalid fields
-        filtered_kwargs = {key: value for key, value in kwargs.items() if key in valid_fields}
+        # Filter kwargs to only include model fields
+        filtered_kwargs = {}
+        model_fields = _get_model_fields(model)
+        for field_name, value in kwargs.items():
+            if field_name in model_fields:
+                filtered_kwargs[field_name] = value
 
         # Create the instance
-        instance = model.objects.create(**filtered_kwargs)
-
-        # Return as dict
+        instance = objects.create(**filtered_kwargs)
         return _instance_to_dict(instance)
 
     # Rename the function to avoid name collisions
-    create_model_instance.__name__ = tool_name
+    create_model_instance.__name__ = f"create_{prefix}_instance"
 
 
 def register_model_resource(
     model: type[Model], lookup: str = "pk", fields: list[str] | None = None, **kwargs: Any
 ) -> None:
     """
-    Register a model as an MCP resource.
+    Register a resource for a model.
 
     Args:
-        model: Django model class
-        lookup: Field to use for lookup (default: 'pk')
-        fields: Optional list of fields to include
-        **kwargs: Additional kwargs for resource registration
+        model: The Django model class
+        lookup: Field to use for lookup (default: "pk")
+        fields: List of fields to include (default: all fields)
+        **kwargs: Additional keyword arguments for resource registration
     """
-    try:
-        mcp_server = get_mcp_server()
-    except Exception:
-        # Server not initialized yet
-        return
-
-    # Create URI template based on app and model
+    mcp_server = get_mcp_server()
+    verbose_name = get_verbose_name(model)
     app_label = get_app_label(model)
     model_name = get_model_name(model)
-    uri_template = f"{app_label}://{{{lookup}}}"
 
-    # Define the resource function with a parameter that matches the URI template
+    # Create URI template
+    uri_template = kwargs.pop("uri_template", None)
+    if uri_template is None:
+        # Use the app_label and the lookup field in the URI template
+        uri_template = f"{app_label}://{{{lookup}}}"
+
+    # Get all field names if not specified
+    if not fields:
+        fields = _get_model_fields(model)
+
     @mcp_server.resource(uri_template, **kwargs)
     def get_model_resource(pk: str) -> str:
         """
-        Get a model instance as a resource.
+        Get model instance as a resource.
 
         Args:
-            pk: The primary key (or lookup value) of the instance
+            pk: The ID to look up
 
         Returns:
-            Markdown representation of the instance
+            Model instance as JSON string
         """
+        # Use correct typing for model manager
+        objects: Any = getattr(model, "objects", None)
+        if not isinstance(objects, Manager):
+            return json.dumps({"error": "Model does not have a valid objects manager"})
+
+        # Build lookup dict based on lookup field
+        lookup_dict = {lookup: pk}
+
         try:
-            # Build lookup dict dynamically for flexibility
-            lookup_dict = {lookup: pk}
-            instance = model.objects.get(**lookup_dict)
-
-            # Format as Markdown for better LLM consumption
-            md_lines = [
-                f"# {get_verbose_name(model).title()}: {instance}",
-                "",
-                f"Information about this {get_verbose_name(model)}.",
-                "",
-                "## Attributes",
-                "",
-            ]
-
-            # Add fields
-            instance_dict = _instance_to_dict(instance)
-            field_names = fields if fields else instance_dict.keys()
-
-            for field_name in field_names:
-                if field_name in instance_dict:
-                    md_lines.append(f"- **{field_name}**: {instance_dict[field_name]}")
-
-            return "\n".join(md_lines)
-        except model.DoesNotExist:
-            return f"# Not Found\n\nThe {get_verbose_name(model)} with {lookup}={pk} does not exist."
+            instance = objects.get(**lookup_dict)
         except Exception as e:
-            return f"# Error\n\nError retrieving {get_verbose_name(model)}: {e!s}"
+            # More generic exception handling to cover DoesNotExist
+            return json.dumps(
+                {
+                    "error": f"{verbose_name.title()} not found",
+                    "id": pk,
+                    "lookup": lookup,
+                    "details": str(e),
+                }
+            )
+
+        # Convert instance to dict
+        instance_dict = {}
+        for field in fields:
+            if hasattr(instance, field):
+                value = getattr(instance, field)
+                # Handle special cases like dates and models
+                if hasattr(value, "isoformat"):
+                    instance_dict[field] = value.isoformat()
+                elif isinstance(value, Model):
+                    # For related models, just include ID
+                    instance_dict[field] = getattr(value, "pk", str(value))
+                else:
+                    instance_dict[field] = value
+
+        # Return as JSON
+        return json.dumps(instance_dict)
 
     # Rename the function to avoid name collisions
-    get_model_resource.__name__ = f"get_{model_name}_resource"
+    get_model_resource.__name__ = f"get_{app_label}_{model_name}_resource"
 
 
 def _instance_to_dict(instance: Model) -> dict[str, Any]:
@@ -312,3 +324,34 @@ def _instance_to_dict(instance: Model) -> dict[str, Any]:
         result[field_name] = value
 
     return result
+
+
+def _get_searchable_fields(model: type[Model]) -> list[str]:
+    """
+    Get a list of searchable field names from the model.
+
+    Args:
+        model: The Django model class
+
+    Returns:
+        List of field names that can be used for text search
+    """
+    searchable_fields = []
+    for field in model._meta.fields:  # noqa: SLF001
+        # Only consider text fields for search
+        if isinstance(field, models.CharField | models.TextField):
+            searchable_fields.append(field.name)
+    return searchable_fields
+
+
+def _get_model_fields(model: type[Model]) -> list[str]:
+    """
+    Get a list of all field names from the model.
+
+    Args:
+        model: The Django model class
+
+    Returns:
+        List of all field names
+    """
+    return [field.name for field in model._meta.fields]  # noqa: SLF001

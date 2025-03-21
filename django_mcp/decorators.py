@@ -122,7 +122,7 @@ def mcp_model_tool(
     """
     from django_mcp.model_tools import register_model_tools
 
-    def decorator(func: Callable | None = None) -> Any:
+    def decorator(func: Callable[..., Any] | None = None) -> Any:
         # If no function is provided, register default tools
         if func is None:
             register_model_tools(model, prefix, include, exclude, **kwargs)
@@ -152,7 +152,7 @@ def mcp_model_resource(
     """
     from django_mcp.model_tools import register_model_resource
 
-    def decorator(func: Callable | None = None) -> Any:
+    def decorator(func: Callable[..., Any] | None = None) -> Any:
         # If no function is provided, register default resource
         if func is None:
             register_model_resource(model, lookup, fields, **kwargs)

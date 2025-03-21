@@ -36,13 +36,13 @@ async def test_get_sse_app():
     """Test that get_sse_app returns the SSE application from the MCP server."""
     mock_server = MagicMock()
     mock_sse_app = MagicMock()
-    mock_server.sse_app.return_value = mock_sse_app
+    mock_server.get_sse_app.return_value = mock_sse_app
 
     with patch("django_mcp.server.get_mcp_server", return_value=mock_server):
         sse_app = get_sse_app()
 
         assert sse_app == mock_sse_app
-        mock_server.sse_app.assert_called_once()
+        mock_server.get_sse_app.assert_called_once()
 
 
 def test_reset_mcp_server():

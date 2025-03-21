@@ -5,13 +5,16 @@ This module provides context classes and utilities for working with
 MCP context in Django applications.
 """
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from functools import wraps
 import inspect
-from typing import Any
+from typing import Any, ParamSpec, TypeVar, cast
 
 from django.contrib.auth.models import AbstractUser, AnonymousUser
 from django.http import HttpRequest
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 
 class DjangoRequestContext:
@@ -50,7 +53,8 @@ class DjangoRequestContext:
             True if the user is authenticated
         """
         if self.user:
-            return self.user.is_authenticated
+            # Don't cast here as it's redundant
+            return bool(self.user.is_authenticated)
         return False
 
     async def report_progress(self, current: int, total: int) -> None:
@@ -145,7 +149,7 @@ class DjangoRequestContext:
         # Call resource callback if available
         resource_callback = self._mcp_context.get("resource_callback")
         if callable(resource_callback):
-            return await resource_callback(uri)
+            return cast(tuple[str, str], await resource_callback(uri))
 
         raise ValueError("Resource reading not available in this context")
 
@@ -171,17 +175,17 @@ def get_django_context(
 
     # If a dict with request, create from request
     if isinstance(context, dict) and "request" in context and context["request"] is not None:
-        return DjangoRequestContext(request=context["request"])
+        return DjangoRequestContext(request=cast(HttpRequest, context["request"]))
 
     # If a request object directly, create from it
     if hasattr(context, "META") and hasattr(context, "method"):
-        return DjangoRequestContext(request=context)
+        return DjangoRequestContext(request=cast(HttpRequest, context))
 
     # Otherwise, can't create context
     return None
 
 
-def with_django_context(func: Callable) -> Callable:
+def with_django_context(func: Callable[P, R]) -> Callable[P, R]:
     """
     Decorator to add Django context to function calls.
 
@@ -199,17 +203,19 @@ def with_django_context(func: Callable) -> Callable:
     is_async = inspect.iscoroutinefunction(func)
 
     if is_async:
-
+        # Define async wrapper with the same type as the original function
         @wraps(func)
-        async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+        async def async_wrapper(*args: Any, **kwargs: Any) -> R:
             if has_context_param and "context" in kwargs:
                 kwargs["context"] = get_django_context(kwargs["context"])
-            return await func(*args, **kwargs)
+            # For async functions, we need to pass through the Awaitable
+            return await cast(Awaitable[R], func(*args, **kwargs))
 
-        return async_wrapper
+        return async_wrapper  # type: ignore
 
+    # Define sync wrapper with the same type as the original function
     @wraps(func)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
+    def wrapper(*args: Any, **kwargs: Any) -> R:
         if has_context_param and "context" in kwargs:
             kwargs["context"] = get_django_context(kwargs["context"])
         return func(*args, **kwargs)

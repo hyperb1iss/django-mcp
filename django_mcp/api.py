@@ -4,15 +4,15 @@ High-level API for django-mcp.
 This module provides a simplified API for common MCP operations.
 """
 
-import asyncio
 from collections.abc import Callable
 from functools import wraps
 import inspect
 import logging
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
+
+from mcp.server.fastmcp import Context
 
 from django_mcp.api_inspection import set_function_attribute
-from django_mcp.context import Context
 from django_mcp.server import get_mcp_server
 
 # Type variables for better type hinting
@@ -39,49 +39,46 @@ def tool(name: str | None = None, description: str | None = None) -> Callable[[F
 
     def decorator(func: F) -> F:
         # Check if it's an async function
-        is_async = asyncio.iscoroutinefunction(func)
+        is_async = inspect.iscoroutinefunction(func)
 
-        # Extract tool information
+        # Get the tool name
         tool_name = name or func.__name__
-        tool_description = description or (func.__doc__ or "").strip()
+
+        # Get the tool description
+        tool_description = description or inspect.getdoc(func) or f"Tool: {tool_name}"
+
+        # Check for parameter annotations and create parameters
+        sig = inspect.signature(func)
+        parameters = {}
 
         # Extract parameters from function signature
-        sig = inspect.signature(func)
-        parameters = []
-
         for param_name, param in sig.parameters.items():
-            # Skip self, cls, and context parameters
-            if param_name in ("self", "cls", "context") or param_name.startswith("_"):
-                continue
+            if param_name in ("self", "cls"):
+                continue  # Skip self and cls parameters
+            if param_name == "context":
+                continue  # Skip context parameter
 
-            # Get parameter type from type annotation if available
-            param_type = "string"  # default
-            if param.annotation != inspect.Parameter.empty:
-                if param.annotation is str:
-                    param_type = "string"
-                elif param.annotation is int:
-                    param_type = "integer"
-                elif param.annotation is float:
-                    param_type = "number"
-                elif param.annotation is bool:
-                    param_type = "boolean"
-                elif param.annotation in (dict, dict):
-                    param_type = "object"
-                elif param.annotation in (list, list):
-                    param_type = "array"
-
-            # Check if parameter is required
+            # Get parameter type and default
+            param_type = param.annotation if param.annotation != inspect.Parameter.empty else Any
+            default = param.default if param.default != inspect.Parameter.empty else None
             required = param.default == inspect.Parameter.empty
 
-            # Add parameter info
-            parameters.append(
-                {
-                    "name": param_name,
-                    "type": param_type,
-                    "description": "",  # No way to get param descriptions in Python
-                    "required": required,
-                }
-            )
+            # Add parameter to parameters dict
+            parameters[param_name] = {
+                "type": param_type,
+                "required": required,
+                "default": default,
+            }
+
+        # Create a wrapper that handles the tool format conversion
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            return func(*args, **kwargs)
+
+        # For async functions
+        @wraps(func)
+        async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+            return await func(*args, **kwargs)
 
         # Register with the MCP server if available
         try:
@@ -89,9 +86,9 @@ def tool(name: str | None = None, description: str | None = None) -> Callable[[F
             # Only register if the server is initialized
             if mcp_server:
                 if is_async:
-                    mcp_server.register_tool_async(tool_name, func, tool_description, parameters)
+                    mcp_server.register_tool_async(tool_name, async_wrapper, tool_description, parameters)  # type: ignore
                 else:
-                    mcp_server.register_tool(tool_name, func, tool_description, parameters)
+                    mcp_server.register_tool(tool_name, wrapper, tool_description, parameters)  # type: ignore
         except Exception:
             # Server might not be initialized yet, which is fine
             # The discovery will register it when server is initialized
@@ -123,32 +120,36 @@ def prompt(name: str | None = None, description: str | None = None) -> Callable[
 
     def decorator(func: F) -> F:
         # Check if it's an async function
-        is_async = asyncio.iscoroutinefunction(func)
+        is_async = inspect.iscoroutinefunction(func)
 
-        # Extract prompt information
+        # Get the prompt name
         prompt_name = name or func.__name__
-        prompt_description = description or (func.__doc__ or "").strip()
+
+        # Get the prompt description
+        prompt_description = description or inspect.getdoc(func) or f"Prompt: {prompt_name}"
+
+        # Check for parameter annotations and create arguments
+        sig = inspect.signature(func)
+        arguments = {}
 
         # Extract arguments from function signature
-        sig = inspect.signature(func)
-        arguments = []
+        for arg_name, param in sig.parameters.items():
+            if arg_name in ("self", "cls"):
+                continue  # Skip self and cls parameters
+            if arg_name == "context":
+                continue  # Skip context parameter
 
-        for param_name, param in sig.parameters.items():
-            # Skip self, cls parameters
-            if param_name in ("self", "cls") or param_name.startswith("_"):
-                continue
-
-            # Check if parameter is required
+            # Get parameter type and default
+            param_type = param.annotation if param.annotation != inspect.Parameter.empty else Any
+            default = param.default if param.default != inspect.Parameter.empty else None
             required = param.default == inspect.Parameter.empty
 
-            # Add argument info
-            arguments.append(
-                {
-                    "name": param_name,
-                    "description": "",  # No way to get param descriptions in Python
-                    "required": required,
-                }
-            )
+            # Add argument to arguments dict
+            arguments[arg_name] = {
+                "type": param_type,
+                "required": required,
+                "default": default,
+            }
 
         # Create a wrapper that handles the prompt format conversion
         @wraps(func)
@@ -158,8 +159,8 @@ def prompt(name: str | None = None, description: str | None = None) -> Callable[
 
             # Return as string if not already in the right format
             if not isinstance(result, dict | list):
-                return str(result)
-            return result
+                return {"result": str(result)}
+            return cast(dict[str, Any], result)
 
         # For async functions
         @wraps(func)
@@ -169,8 +170,8 @@ def prompt(name: str | None = None, description: str | None = None) -> Callable[
 
             # Return as string if not already in the right format
             if not isinstance(result, dict | list):
-                return str(result)
-            return result
+                return {"result": str(result)}
+            return cast(dict[str, Any], result)
 
         # Register with the MCP server if available
         try:
@@ -178,9 +179,9 @@ def prompt(name: str | None = None, description: str | None = None) -> Callable[
             # Only register if the server is initialized
             if mcp_server:
                 if is_async:
-                    mcp_server.register_prompt_async(prompt_name, async_wrapper, prompt_description, arguments)
+                    mcp_server.register_prompt_async(prompt_name, async_wrapper, prompt_description, arguments)  # type: ignore
                 else:
-                    mcp_server.register_prompt(prompt_name, wrapper, prompt_description, arguments)
+                    mcp_server.register_prompt(prompt_name, wrapper, prompt_description, arguments)  # type: ignore
         except Exception:
             # Server might not be initialized yet, which is fine
             # The discovery will register it when server is initialized
@@ -212,10 +213,10 @@ def resource(uri_template: str, description: str | None = None) -> Callable[[F],
 
     def decorator(func: F) -> F:
         # Check if it's an async function
-        is_async = asyncio.iscoroutinefunction(func)
+        is_async = inspect.iscoroutinefunction(func)
 
-        # Extract resource information
-        resource_description = description or (func.__doc__ or "").strip()
+        # Get the resource description
+        resource_description = description or inspect.getdoc(func) or f"Resource: {uri_template}"
 
         # Register with the MCP server if available
         try:
@@ -223,9 +224,9 @@ def resource(uri_template: str, description: str | None = None) -> Callable[[F],
             # Only register if the server is initialized
             if mcp_server:
                 if is_async:
-                    mcp_server.register_resource_async(uri_template, func, resource_description)
+                    mcp_server.register_resource_async(uri_template, func, resource_description)  # type: ignore
                 else:
-                    mcp_server.register_resource(uri_template, func, resource_description)
+                    mcp_server.register_resource(uri_template, func, resource_description)  # type: ignore
         except Exception:
             # Server might not be initialized yet, which is fine
             # The discovery will register it when server is initialized
@@ -247,47 +248,39 @@ def invoke_tool(name: str, params: dict[str, Any], context: Context | None = Non
     Args:
         name: Name of the tool to invoke.
         params: Parameters to pass to the tool.
-        context: Optional context object. If not provided, a new context will be created.
+        context: Optional context object for the tool execution.
 
     Returns:
-        The result of the tool invocation.
-
-    Raises:
-        ValueError: If the tool doesn't exist or the MCP server is not initialized.
+        The result of invoking the tool.
     """
-    mcp_server = get_mcp_server()
-    if not mcp_server:
-        raise ValueError("MCP server not initialized")
+    try:
+        mcp_server = get_mcp_server()
+    except Exception as e:
+        raise ValueError(f"MCP server not initialized: {e!s}") from e
 
-    if context is None:
-        context = Context()
-
-    return mcp_server.invoke_tool(name, params, context)
+    # Invoke the tool
+    return mcp_server.invoke_tool(name, params, context)  # type: ignore
 
 
 async def invoke_tool_async(name: str, params: dict[str, Any], context: Context | None = None) -> Any:
     """
-    Invoke an asynchronous MCP tool.
+    Invoke an MCP tool asynchronously.
 
     Args:
         name: Name of the tool to invoke.
         params: Parameters to pass to the tool.
-        context: Optional context object. If not provided, a new context will be created.
+        context: Optional context object for the tool execution.
 
     Returns:
-        The result of the tool invocation.
-
-    Raises:
-        ValueError: If the tool doesn't exist or the MCP server is not initialized.
+        The result of invoking the tool.
     """
-    mcp_server = get_mcp_server()
-    if not mcp_server:
-        raise ValueError("MCP server not initialized")
+    try:
+        mcp_server = get_mcp_server()
+    except Exception as e:
+        raise ValueError(f"MCP server not initialized: {e!s}") from e
 
-    if context is None:
-        context = Context()
-
-    return await mcp_server.invoke_tool_async(name, params, context)
+    # Invoke the tool asynchronously
+    return await mcp_server.invoke_tool_async(name, params, context)  # type: ignore
 
 
 def invoke_prompt(name: str, args: dict[str, Any], context: Context | None = None) -> str:
@@ -297,47 +290,39 @@ def invoke_prompt(name: str, args: dict[str, Any], context: Context | None = Non
     Args:
         name: Name of the prompt to invoke.
         args: Arguments to pass to the prompt.
-        context: Optional context object. If not provided, a new context will be created.
+        context: Optional context object for the prompt execution.
 
     Returns:
-        The result of the prompt invocation as a string.
-
-    Raises:
-        ValueError: If the prompt doesn't exist or the MCP server is not initialized.
+        The result of invoking the prompt (as a string).
     """
-    mcp_server = get_mcp_server()
-    if not mcp_server:
-        raise ValueError("MCP server not initialized")
+    try:
+        mcp_server = get_mcp_server()
+    except Exception as e:
+        raise ValueError(f"MCP server not initialized: {e!s}") from e
 
-    if context is None:
-        context = Context()
-
-    return mcp_server.invoke_prompt(name, args, context)
+    # Invoke the prompt
+    return cast(str, mcp_server.invoke_prompt(name, args, context))  # type: ignore
 
 
 async def invoke_prompt_async(name: str, args: dict[str, Any], context: Context | None = None) -> str:
     """
-    Invoke an asynchronous MCP prompt.
+    Invoke an MCP prompt asynchronously.
 
     Args:
         name: Name of the prompt to invoke.
         args: Arguments to pass to the prompt.
-        context: Optional context object. If not provided, a new context will be created.
+        context: Optional context object for the prompt execution.
 
     Returns:
-        The result of the prompt invocation as a string.
-
-    Raises:
-        ValueError: If the prompt doesn't exist or the MCP server is not initialized.
+        The result of invoking the prompt (as a string).
     """
-    mcp_server = get_mcp_server()
-    if not mcp_server:
-        raise ValueError("MCP server not initialized")
+    try:
+        mcp_server = get_mcp_server()
+    except Exception as e:
+        raise ValueError(f"MCP server not initialized: {e!s}") from e
 
-    if context is None:
-        context = Context()
-
-    return await mcp_server.invoke_prompt_async(name, args, context)
+    # Invoke the prompt asynchronously
+    return cast(str, await mcp_server.invoke_prompt_async(name, args, context))  # type: ignore
 
 
 def read_resource(uri: str, context: Context | None = None) -> Any:

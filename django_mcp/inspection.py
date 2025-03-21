@@ -5,7 +5,7 @@ This module provides functions for accessing MCP components (tools, resources, p
 in a way that avoids accessing private members of the MCP server.
 """
 
-from typing import Any
+from typing import Any, cast
 
 from django.db.models import Model
 
@@ -25,7 +25,10 @@ def get_tools() -> list[dict[str, Any]]:
     """
     mcp_server = get_mcp_server()
     # We access the private members here so the rest of the codebase doesn't have to
-    return list(mcp_server._tool_manager.tools.values())  # noqa: SLF001
+    # Use Any to bypass type checking of private attribute access
+    tool_manager: Any = mcp_server._tool_manager  # noqa: SLF001
+    tools: Any = tool_manager._tools  # noqa: SLF001
+    return list(cast(dict[str, Any], tools).values())
 
 
 def get_resources() -> list[dict[str, Any]]:
@@ -37,7 +40,9 @@ def get_resources() -> list[dict[str, Any]]:
     """
     mcp_server = get_mcp_server()
     # We access the private members here so the rest of the codebase doesn't have to
-    return list(mcp_server._resource_manager.resources.values())  # noqa: SLF001
+    resource_manager: Any = mcp_server._resource_manager  # noqa: SLF001
+    resources: Any = resource_manager._resources  # noqa: SLF001
+    return list(cast(dict[str, Any], resources).values())
 
 
 def get_prompts() -> list[dict[str, Any]]:
@@ -49,7 +54,9 @@ def get_prompts() -> list[dict[str, Any]]:
     """
     mcp_server = get_mcp_server()
     # We access the private members here so the rest of the codebase doesn't have to
-    return list(mcp_server._prompt_manager.prompts.values())  # noqa: SLF001
+    prompt_manager: Any = mcp_server._prompt_manager  # noqa: SLF001
+    prompts: Any = prompt_manager._prompts  # noqa: SLF001
+    return list(cast(dict[str, Any], prompts).values())
 
 
 def get_tool(name: str) -> dict[str, Any]:
@@ -67,9 +74,13 @@ def get_tool(name: str) -> dict[str, Any]:
     """
     mcp_server = get_mcp_server()
     # We access the private members here so the rest of the codebase doesn't have to
-    if name not in mcp_server._tool_manager.tools:  # noqa: SLF001
+    tool_manager: Any = mcp_server._tool_manager  # noqa: SLF001
+    tools: Any = tool_manager._tools  # noqa: SLF001
+    tools_dict = cast(dict[str, Any], tools)
+
+    if name not in tools_dict:
         raise ValueError(f"Tool '{name}' not found")
-    return mcp_server._tool_manager.tools[name]  # noqa: SLF001
+    return cast(dict[str, Any], tools_dict[name])
 
 
 def has_tool(name: str) -> bool:
@@ -84,7 +95,10 @@ def has_tool(name: str) -> bool:
     """
     mcp_server = get_mcp_server()
     # We access the private members here so the rest of the codebase doesn't have to
-    return name in mcp_server._tool_manager.tools  # noqa: SLF001
+    tool_manager: Any = mcp_server._tool_manager  # noqa: SLF001
+    tools: Any = tool_manager._tools  # noqa: SLF001
+    tools_dict = cast(dict[str, Any], tools)
+    return name in tools_dict
 
 
 def match_resource_uri(uri: str) -> dict[str, Any] | None:
@@ -100,10 +114,18 @@ def match_resource_uri(uri: str) -> dict[str, Any] | None:
     mcp_server = get_mcp_server()
 
     # We access the private members here so the rest of the codebase doesn't have to
-    for resource in mcp_server._resource_manager.resources.values():  # noqa: SLF001
+    resource_manager: Any = mcp_server._resource_manager  # noqa: SLF001
+    resources: Any = resource_manager._resources  # noqa: SLF001
+    resources_dict = cast(dict[str, Any], resources)
+
+    for resource in resources_dict.values():
+        resource_dict = cast(dict[str, Any], resource)
+        # Get uri_template safely with casting
+        uri_template = cast(str, resource_dict.get("uri_template", ""))
+
         # Basic check - this is not perfect but works for simple cases
         # For real template matching we'd need a proper URI template library
-        template_parts = resource.uri_template.split("/")
+        template_parts = uri_template.split("/")
         uri_parts = uri.split("/")
 
         if len(template_parts) != len(uri_parts):
@@ -119,7 +141,7 @@ def match_resource_uri(uri: str) -> dict[str, Any] | None:
                 break
 
         if matches:
-            return resource
+            return cast(dict[str, Any], resource)
 
     return None
 
@@ -139,9 +161,13 @@ def get_prompt(name: str) -> dict[str, Any]:
     """
     mcp_server = get_mcp_server()
     # We access the private members here so the rest of the codebase doesn't have to
-    if name not in mcp_server._prompt_manager.prompts:  # noqa: SLF001
+    prompt_manager: Any = mcp_server._prompt_manager  # noqa: SLF001
+    prompts: Any = prompt_manager._prompts  # noqa: SLF001
+    prompts_dict = cast(dict[str, Any], prompts)
+
+    if name not in prompts_dict:
         raise ValueError(f"Prompt '{name}' not found")
-    return mcp_server._prompt_manager.prompts[name]  # noqa: SLF001
+    return cast(dict[str, Any], prompts_dict[name])
 
 
 def has_prompt(name: str) -> bool:
@@ -156,7 +182,10 @@ def has_prompt(name: str) -> bool:
     """
     mcp_server = get_mcp_server()
     # We access the private members here so the rest of the codebase doesn't have to
-    return name in mcp_server._prompt_manager.prompts  # noqa: SLF001
+    prompt_manager: Any = mcp_server._prompt_manager  # noqa: SLF001
+    prompts: Any = prompt_manager._prompts  # noqa: SLF001
+    prompts_dict = cast(dict[str, Any], prompts)
+    return name in prompts_dict
 
 
 # ----------------------
@@ -189,7 +218,7 @@ def get_model_name(model: type[Model] | Model) -> str:
         The model name
     """
     meta = get_model_meta(model)
-    return meta.model_name
+    return cast(str, meta.model_name)
 
 
 def get_app_label(model: type[Model] | Model) -> str:
@@ -203,7 +232,7 @@ def get_app_label(model: type[Model] | Model) -> str:
         The app label
     """
     meta = get_model_meta(model)
-    return meta.app_label
+    return cast(str, meta.app_label)
 
 
 def get_verbose_name(model: type[Model] | Model) -> str:
@@ -217,7 +246,7 @@ def get_verbose_name(model: type[Model] | Model) -> str:
         The verbose name
     """
     meta = get_model_meta(model)
-    return meta.verbose_name
+    return cast(str, meta.verbose_name)
 
 
 def get_model_verbose_name_title(model: type[Model] | Model) -> str:
@@ -245,10 +274,10 @@ def get_verbose_name_plural(model: type[Model] | Model) -> str:
         The plural verbose name
     """
     meta = get_model_meta(model)
-    return meta.verbose_name_plural
+    return cast(str, meta.verbose_name_plural)
 
 
-def get_model_fields(model: type[Model] | Model) -> list:
+def get_model_fields(model: type[Model] | Model) -> list[Any]:
     """
     Get the model's fields in a way that avoids SLF001 linting errors.
 
@@ -259,7 +288,7 @@ def get_model_fields(model: type[Model] | Model) -> list:
         List of model fields
     """
     meta = get_model_meta(model)
-    return meta.fields
+    return cast(list[Any], meta.fields)
 
 
 def get_model_field_names(model: type[Model] | Model, exclude_pk: bool = False) -> list[str]:

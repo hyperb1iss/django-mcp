@@ -9,26 +9,35 @@ import contextlib
 import logging
 from typing import Any
 
-# Import ViewSet conditionally since DRF might not be installed
+from django_mcp.inspection import get_model_verbose_name_title, get_verbose_name
+from django_mcp.server import get_mcp_server
+
+
+# Define dummy classes first
+class _DummyViewSet:
+    """Dummy class for ViewSet when DRF not available."""
+
+
+class _DummyResponse:
+    """Dummy class for Response when DRF not available."""
+
+    @property
+    def data(self) -> dict[str, Any]:
+        """Return empty data dict when DRF not available."""
+        return {}
+
+
+# Try to import real DRF classes
 try:
-    from rest_framework.response import Response
-    from rest_framework.viewsets import ViewSet
+    from rest_framework.response import Response as DRFResponse
+    from rest_framework.viewsets import ViewSet as DRFViewSet
 
     DRF_AVAILABLE = True
 except ImportError:
-    # Create dummy classes for type checking
-    class ViewSet:
-        pass
-
-    class Response:
-        @property
-        def data(self):
-            return {}
-
+    # Use dummy classes if not available
+    DRFViewSet = _DummyViewSet
+    DRFResponse = _DummyResponse
     DRF_AVAILABLE = False
-
-from django_mcp.inspection import get_model_verbose_name_title, get_verbose_name
-from django_mcp.server import get_mcp_server
 
 
 def register_drf_viewset(viewset_class: Any, **_kwargs: Any) -> None:
@@ -46,7 +55,7 @@ def register_drf_viewset(viewset_class: Any, **_kwargs: Any) -> None:
 
     # Skip if not a ViewSet
     try:
-        if not issubclass(viewset_class, ViewSet):
+        if not issubclass(viewset_class, DRFViewSet):
             logging.debug("%s is not a ViewSet, skipping", viewset_class)
             return
     except TypeError:
@@ -248,32 +257,29 @@ def _get_parameters_for_action(_viewset_class: Any, action: str, _method: str) -
             # Fields would be added dynamically in a real implementation
         ]
 
-    if action == "destroy":
-        return [
-            {"name": "id", "description": "ID of the resource to delete", "required": True, "type": "integer"},
-        ]
-
-    # Default - empty parameters
+    # Default empty parameters for other actions
     return []
 
 
 def _create_request(method: str) -> Any:
     """
-    Create a fake request object for DRF actions.
+    Create a fake request object for DRF ViewSet actions.
 
     Args:
         method: HTTP method
 
     Returns:
-        A minimal Request object
+        A fake request object
     """
 
-    # Create a minimal request object
+    # Simple fake request implementation
     class FakeRequest:
-        def __init__(self, method):
+        def __init__(self, method: str) -> None:
             self.method = method.upper()
-            self.data = {}
-            self.query_params = {}
-            self.META = {"SCRIPT_NAME": "", "PATH_INFO": "/"}
+            self.data: dict[str, Any] = {}
+            self.query_params: dict[str, Any] = {}
+            self.META: dict[str, str] = {"REMOTE_ADDR": "127.0.0.1"}
+            self.session: dict[str, Any] = {}
+            self.user = None
 
     return FakeRequest(method)

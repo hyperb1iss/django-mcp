@@ -29,7 +29,7 @@ def set_function_attribute(func: T, name: str, value: Any) -> T:
     return func
 
 
-def get_admin_site_registry(admin_site: AdminSite) -> dict:
+def get_admin_site_registry(admin_site: AdminSite) -> dict[Any, Any]:
     """
     Get the admin site's registry of models to avoid SLF001 linting errors.
 

@@ -5,12 +5,14 @@ This command allows you to invoke tools and prompts directly from the command li
 """
 # pylint: disable=duplicate-code
 
+from argparse import ArgumentParser
 import asyncio
 import json
+from typing import Any
 
 from django.core.management.base import BaseCommand, CommandError
+from mcp.server.fastmcp import Context
 
-from django_mcp.context import Context
 from django_mcp.inspection import get_prompts, get_resources, get_tools, has_prompt, has_tool, match_resource_uri
 from django_mcp.server import get_mcp_server
 
@@ -20,7 +22,7 @@ class Command(BaseCommand):
 
     help = "Test MCP components"
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: ArgumentParser) -> None:
         """Add command line arguments."""
         subparsers = parser.add_subparsers(dest="component_type", help="Component type to test")
 
@@ -49,25 +51,24 @@ class Command(BaseCommand):
             help="Component type to list (default: tools)",
         )
 
-    def handle(self, **options):
-        """Execute the command."""
-        try:
-            mcp_server = get_mcp_server()
-        except Exception as e:
-            self.stderr.write(self.style.ERROR(f"MCP server not initialized: {e!s}"))
-            return
+    def handle(self, **options: Any) -> None:
+        """
+        Execute command.
 
-        if not mcp_server:
-            self.stderr.write(self.style.ERROR("MCP server not initialized"))
-            return
-
+        Args:
+            **options: Command line options
+        """
         component_type = options.get("component_type")
 
         if not component_type:
-            self.stderr.write(self.style.ERROR("No component type specified"))
-            self.print_help("manage.py", "mcp_test")
-            return
+            raise CommandError("You must specify a component type (tool, resource, prompt, or list)")
 
+        # Initialize MCP server
+        mcp_server = get_mcp_server()
+        if not mcp_server:
+            raise CommandError("MCP server is not initialized")
+
+        # Handle different component types
         if component_type == "list":
             self._handle_list(options)
         elif component_type == "tool":
@@ -76,147 +77,161 @@ class Command(BaseCommand):
             self._handle_resource(mcp_server, options)
         elif component_type == "prompt":
             self._handle_prompt(mcp_server, options)
+        else:
+            raise CommandError(f"Unknown component type: {component_type}")
 
-    def _handle_list(self, options):
-        """Handle listing components."""
+    def _handle_list(self, options: dict[str, Any]) -> None:
+        """
+        Handle list command.
+
+        Args:
+            options: Command line options
+        """
         component_type = options.get("type", "tools")
 
         if component_type == "tools":
-            # Use the inspection module instead of accessing private members
+            self.stdout.write("Available tools:")
             tools = get_tools()
-            self.stdout.write(self.style.SUCCESS(f"Available tools ({len(tools)}):"))
             for tool in tools:
-                self.stdout.write(f"  - {tool.name}")
+                self.stdout.write(f"  - {tool.get('name', 'Unknown')}")
 
         elif component_type == "resources":
-            # Use the inspection module instead of accessing private members
+            self.stdout.write("Available resources:")
             resources = get_resources()
-            self.stdout.write(self.style.SUCCESS(f"Available resources ({len(resources)}):"))
             for resource in resources:
-                self.stdout.write(f"  - {resource.uri_template}")
+                self.stdout.write(f"  - {resource.get('uri_template', 'Unknown')}")
 
         elif component_type == "prompts":
-            # Use the inspection module instead of accessing private members
+            self.stdout.write("Available prompts:")
             prompts = get_prompts()
-            self.stdout.write(self.style.SUCCESS(f"Available prompts ({len(prompts)}):"))
             for prompt in prompts:
-                self.stdout.write(f"  - {prompt.name}")
+                self.stdout.write(f"  - {prompt.get('name', 'Unknown')}")
 
-    def _handle_tool(self, mcp_server, options):
-        """Handle tool testing."""
-        tool_name = options.get("tool_name")
+    def _handle_tool(self, mcp_server: Any, options: dict[str, Any]) -> None:
+        """
+        Handle tool command.
 
-        # Get parameters from either --params or --file
-        params = {}
+        Args:
+            mcp_server: MCP server instance
+            options: Command line options
+        """
+        tool_name = options["tool_name"]
+
+        # Check if tool exists
+        if not has_tool(tool_name):
+            raise CommandError(f"Tool '{tool_name}' not found")
+
+        # Get parameters
+        params: dict[str, Any] = {}
         if options.get("params"):
             try:
-                params = json.loads(options.get("params"))
-            except json.JSONDecodeError as err:
-                raise CommandError("Invalid JSON in --params") from err
-        elif options.get("file"):
+                params = json.loads(options["params"])
+            except json.JSONDecodeError as e:
+                raise CommandError(f"Invalid JSON for parameters: {e}") from e
+
+        if options.get("file"):
             try:
-                with open(options.get("file"), encoding="utf-8") as f:
+                with open(options["file"], encoding="utf-8") as f:
                     params = json.load(f)
             except (json.JSONDecodeError, FileNotFoundError) as e:
-                raise CommandError(f"Error reading parameters file: {e!s}") from e
+                raise CommandError(f"Error loading parameters from file: {e}") from e
 
-        self.stdout.write(self.style.SUCCESS(f"Testing tool: {tool_name}"))
-        self.stdout.write(f"Parameters: {json.dumps(params, indent=2)}")
+        # Create context
+        context = Context()  # type: ignore
 
-        # Create a context
-        context = Context()
-
-        # Check if the tool exists using the inspection module
-        if not has_tool(tool_name):
-            self.stderr.write(self.style.ERROR(f"Tool '{tool_name}' not found"))
-            return
-
-        # Run the tool
+        # Execute tool
         try:
-            if asyncio.iscoroutinefunction(mcp_server.invoke_tool):
-                result = asyncio.run(mcp_server.invoke_tool(tool_name, params, context))
-            else:
-                result = mcp_server.invoke_tool(tool_name, params, context)
+            self.stdout.write(f"Executing tool '{tool_name}'...")
+            result = None
 
-            self.stdout.write(self.style.SUCCESS("Result:"))
+            # Execute the tool (using getattr to avoid mypy errors)
+            result = asyncio.run(mcp_server.invoke_tool(tool_name, params, context))
+
+            # Display result
             if isinstance(result, dict | list):
                 self.stdout.write(json.dumps(result, indent=2))
             else:
                 self.stdout.write(str(result))
 
         except Exception as e:
-            self.stderr.write(self.style.ERROR(f"Error invoking tool: {e!s}"))
+            raise CommandError(f"Error executing tool: {e}") from e
 
-    def _handle_resource(self, mcp_server, options):
-        """Handle resource testing."""
-        resource_uri = options.get("resource_uri")
+    def _handle_resource(self, mcp_server: Any, options: dict[str, Any]) -> None:
+        """
+        Handle resource command.
 
-        self.stdout.write(self.style.SUCCESS(f"Testing resource: {resource_uri}"))
+        Args:
+            mcp_server: MCP server instance
+            options: Command line options
+        """
+        resource_uri = options["resource_uri"]
 
-        # Create a context
-        context = Context()
-
-        # Check if there's a resource handler for this URI using the inspection module
+        # Check if resource exists
         resource = match_resource_uri(resource_uri)
         if not resource:
-            self.stderr.write(self.style.ERROR(f"No resource found for URI: {resource_uri}"))
-            return
+            raise CommandError(f"No resource matching URI '{resource_uri}' found")
 
-        # Read the resource
+        # Create context
+        context = Context()  # type: ignore
+
+        # Read resource
         try:
-            if asyncio.iscoroutinefunction(mcp_server.read_resource):
-                result = asyncio.run(mcp_server.read_resource(resource_uri, context))
-            else:
-                result = mcp_server.read_resource(resource_uri, context)
+            self.stdout.write(f"Reading resource '{resource_uri}'...")
+            # Execute the resource (using getattr to avoid mypy errors)
+            result = asyncio.run(mcp_server.read_resource(resource_uri, context))
 
-            self.stdout.write(self.style.SUCCESS("Result:"))
-            if isinstance(result, dict | list):
-                self.stdout.write(json.dumps(result, indent=2))
+            # Display result
+            if isinstance(result, tuple) and len(result) == 2:
+                content, mime_type = result
+                self.stdout.write(f"MIME type: {mime_type}")
+                self.stdout.write("Content:")
+                self.stdout.write(content)
             else:
                 self.stdout.write(str(result))
 
         except Exception as e:
-            self.stderr.write(self.style.ERROR(f"Error reading resource: {e!s}"))
+            raise CommandError(f"Error reading resource: {e}") from e
 
-    def _handle_prompt(self, mcp_server, options):
-        """Handle prompt testing."""
-        prompt_name = options.get("prompt_name")
+    def _handle_prompt(self, mcp_server: Any, options: dict[str, Any]) -> None:
+        """
+        Handle prompt command.
 
-        # Get arguments from either --args or --file
-        args = {}
+        Args:
+            mcp_server: MCP server instance
+            options: Command line options
+        """
+        prompt_name = options["prompt_name"]
+
+        # Check if prompt exists
+        if not has_prompt(prompt_name):
+            raise CommandError(f"Prompt '{prompt_name}' not found")
+
+        # Get arguments
+        args: dict[str, Any] = {}
         if options.get("args"):
             try:
-                args = json.loads(options.get("args"))
-            except json.JSONDecodeError as err:
-                raise CommandError("Invalid JSON in --args") from err
-        elif options.get("file"):
+                args = json.loads(options["args"])
+            except json.JSONDecodeError as e:
+                raise CommandError(f"Invalid JSON for arguments: {e}") from e
+
+        if options.get("file"):
             try:
-                with open(options.get("file"), encoding="utf-8") as f:
+                with open(options["file"], encoding="utf-8") as f:
                     args = json.load(f)
             except (json.JSONDecodeError, FileNotFoundError) as e:
-                raise CommandError(f"Error reading arguments file: {e!s}") from e
+                raise CommandError(f"Error loading arguments from file: {e}") from e
 
-        self.stdout.write(self.style.SUCCESS(f"Testing prompt: {prompt_name}"))
-        self.stdout.write(f"Arguments: {json.dumps(args, indent=2)}")
+        # Create context
+        context = Context()  # type: ignore
 
-        # Create a context
-        context = Context()
-
-        # Check if the prompt exists using the inspection module
-        if not has_prompt(prompt_name):
-            self.stderr.write(self.style.ERROR(f"Prompt '{prompt_name}' not found"))
-            return
-
-        # Run the prompt
+        # Execute prompt
         try:
-            if asyncio.iscoroutinefunction(mcp_server.invoke_prompt):
-                result = asyncio.run(mcp_server.invoke_prompt(prompt_name, args, context))
-            else:
-                result = mcp_server.invoke_prompt(prompt_name, args, context)
+            self.stdout.write(f"Executing prompt '{prompt_name}'...")
+            # Execute the prompt (using getattr to avoid mypy errors)
+            result = asyncio.run(mcp_server.invoke_prompt(prompt_name, args, context))
 
-            self.stdout.write(self.style.SUCCESS("Result:"))
-            # Prompts return strings
+            # Display result
             self.stdout.write(str(result))
 
         except Exception as e:
-            self.stderr.write(self.style.ERROR(f"Error invoking prompt: {e!s}"))
+            raise CommandError(f"Error executing prompt: {e}") from e
