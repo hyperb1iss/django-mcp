@@ -10,6 +10,7 @@ import json
 from django.core.management.base import BaseCommand, CommandError
 
 from django_mcp.context import Context
+from django_mcp.inspection import get_prompts, get_resources, get_tools, has_prompt, has_tool, match_resource_uri
 from django_mcp.server import get_mcp_server
 
 
@@ -47,7 +48,7 @@ class Command(BaseCommand):
             help="Component type to list (default: tools)",
         )
 
-    def handle(self, *args, **options):
+    def handle(self, **options):
         """Execute the command."""
         try:
             mcp_server = get_mcp_server()
@@ -67,7 +68,7 @@ class Command(BaseCommand):
             return
 
         if component_type == "list":
-            self._handle_list(mcp_server, options)
+            self._handle_list(options)
         elif component_type == "tool":
             self._handle_tool(mcp_server, options)
         elif component_type == "resource":
@@ -75,25 +76,27 @@ class Command(BaseCommand):
         elif component_type == "prompt":
             self._handle_prompt(mcp_server, options)
 
-    def _handle_list(self, mcp_server, options):
+    def _handle_list(self, options):
         """Handle listing components."""
         component_type = options.get("type", "tools")
 
         if component_type == "tools":
-            # Accessing private managers, but this is necessary for inspection
-            tools = list(mcp_server._tool_manager.tools.values())
+            # Use the inspection module instead of accessing private members
+            tools = get_tools()
             self.stdout.write(self.style.SUCCESS(f"Available tools ({len(tools)}):"))
             for tool in tools:
                 self.stdout.write(f"  - {tool.name}")
 
         elif component_type == "resources":
-            resources = list(mcp_server._resource_manager.resources.values())
+            # Use the inspection module instead of accessing private members
+            resources = get_resources()
             self.stdout.write(self.style.SUCCESS(f"Available resources ({len(resources)}):"))
             for resource in resources:
                 self.stdout.write(f"  - {resource.uri_template}")
 
         elif component_type == "prompts":
-            prompts = list(mcp_server._prompt_manager.prompts.values())
+            # Use the inspection module instead of accessing private members
+            prompts = get_prompts()
             self.stdout.write(self.style.SUCCESS(f"Available prompts ({len(prompts)}):"))
             for prompt in prompts:
                 self.stdout.write(f"  - {prompt.name}")
@@ -107,14 +110,14 @@ class Command(BaseCommand):
         if options.get("params"):
             try:
                 params = json.loads(options.get("params"))
-            except json.JSONDecodeError:
-                raise CommandError("Invalid JSON in --params")
+            except json.JSONDecodeError as err:
+                raise CommandError("Invalid JSON in --params") from err
         elif options.get("file"):
             try:
                 with open(options.get("file")) as f:
                     params = json.load(f)
             except (json.JSONDecodeError, FileNotFoundError) as e:
-                raise CommandError(f"Error reading parameters file: {e!s}")
+                raise CommandError(f"Error reading parameters file: {e!s}") from e
 
         self.stdout.write(self.style.SUCCESS(f"Testing tool: {tool_name}"))
         self.stdout.write(f"Parameters: {json.dumps(params, indent=2)}")
@@ -122,18 +125,15 @@ class Command(BaseCommand):
         # Create a context
         context = Context()
 
-        # Check if the tool exists
-        if tool_name not in mcp_server._tool_manager.tools:
+        # Check if the tool exists using the inspection module
+        if not has_tool(tool_name):
             self.stderr.write(self.style.ERROR(f"Tool '{tool_name}' not found"))
             return
 
-        # Get the tool
-        tool = mcp_server._tool_manager.tools[tool_name]
-
         # Run the tool
         try:
-            if tool.is_async:
-                result = asyncio.run(mcp_server.invoke_tool_async(tool_name, params, context))
+            if asyncio.iscoroutinefunction(mcp_server.invoke_tool):
+                result = asyncio.run(mcp_server.invoke_tool(tool_name, params, context))
             else:
                 result = mcp_server.invoke_tool(tool_name, params, context)
 
@@ -155,17 +155,9 @@ class Command(BaseCommand):
         # Create a context
         context = Context()
 
-        # Check if there's a resource handler for this URI
-        # Since resources use URI templates, we need to find a matching one
-        resource_found = False
-        for resource in mcp_server._resource_manager.resources.values():
-            # Basic check - this is not perfect but works for simple cases
-            # For real template matching we'd need a proper URI template library
-            if resource.uri_template.split("{")[0] in resource_uri:
-                resource_found = True
-                break
-
-        if not resource_found:
+        # Check if there's a resource handler for this URI using the inspection module
+        resource = match_resource_uri(resource_uri)
+        if not resource:
             self.stderr.write(self.style.ERROR(f"No resource found for URI: {resource_uri}"))
             return
 
@@ -194,14 +186,14 @@ class Command(BaseCommand):
         if options.get("args"):
             try:
                 args = json.loads(options.get("args"))
-            except json.JSONDecodeError:
-                raise CommandError("Invalid JSON in --args")
+            except json.JSONDecodeError as err:
+                raise CommandError("Invalid JSON in --args") from err
         elif options.get("file"):
             try:
                 with open(options.get("file")) as f:
                     args = json.load(f)
             except (json.JSONDecodeError, FileNotFoundError) as e:
-                raise CommandError(f"Error reading arguments file: {e!s}")
+                raise CommandError(f"Error reading arguments file: {e!s}") from e
 
         self.stdout.write(self.style.SUCCESS(f"Testing prompt: {prompt_name}"))
         self.stdout.write(f"Arguments: {json.dumps(args, indent=2)}")
@@ -209,18 +201,15 @@ class Command(BaseCommand):
         # Create a context
         context = Context()
 
-        # Check if the prompt exists
-        if prompt_name not in mcp_server._prompt_manager.prompts:
+        # Check if the prompt exists using the inspection module
+        if not has_prompt(prompt_name):
             self.stderr.write(self.style.ERROR(f"Prompt '{prompt_name}' not found"))
             return
 
-        # Get the prompt
-        prompt = mcp_server._prompt_manager.prompts[prompt_name]
-
         # Run the prompt
         try:
-            if prompt.is_async:
-                result = asyncio.run(mcp_server.invoke_prompt_async(prompt_name, args, context))
+            if asyncio.iscoroutinefunction(mcp_server.invoke_prompt):
+                result = asyncio.run(mcp_server.invoke_prompt(prompt_name, args, context))
             else:
                 result = mcp_server.invoke_prompt(prompt_name, args, context)
 

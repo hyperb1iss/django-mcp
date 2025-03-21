@@ -9,6 +9,14 @@ from typing import Any
 from django.db import models
 from django.db.models import Model, Q
 
+from django_mcp.inspection import (
+    get_app_label,
+    get_model_field_names,
+    get_model_fields,
+    get_model_name,
+    get_verbose_name,
+    get_verbose_name_plural,
+)
 from django_mcp.server import get_mcp_server
 
 
@@ -36,7 +44,7 @@ def register_model_tools(
         return
 
     # Get model metadata
-    model_name = model._meta.model_name
+    model_name = get_model_name(model)
 
     # Set default prefix if not provided
     if prefix is None:
@@ -66,17 +74,17 @@ def register_model_tools(
         register_model_create_tool(model, prefix, **kwargs)
 
 
-def register_model_get_tool(model: type[Model], prefix: str, **kwargs: Any) -> None:
+def register_model_get_tool(model: type[Model], prefix: str, **_kwargs: Any) -> None:
     """
     Register a tool to get a single model instance by ID.
 
     Args:
         model: Django model class
         prefix: Prefix for the tool name
-        **kwargs: Additional kwargs for tool registration
+        **_kwargs: Additional kwargs for tool registration (not used)
     """
     mcp_server = get_mcp_server()
-    verbose_name = model._meta.verbose_name
+    verbose_name = get_verbose_name(model)
 
     @mcp_server.tool(description=f"Get a {verbose_name} by ID")
     def get_model_instance(id: int) -> dict[str, Any]:
@@ -96,17 +104,17 @@ def register_model_get_tool(model: type[Model], prefix: str, **kwargs: Any) -> N
     get_model_instance.__name__ = f"get_{prefix}_instance"
 
 
-def register_model_list_tool(model: type[Model], prefix: str, **kwargs: Any) -> None:
+def register_model_list_tool(model: type[Model], prefix: str, **_kwargs: Any) -> None:
     """
     Register a tool to list model instances.
 
     Args:
         model: Django model class
         prefix: Prefix for the tool name
-        **kwargs: Additional kwargs for tool registration
+        **_kwargs: Additional kwargs for tool registration (not used)
     """
     mcp_server = get_mcp_server()
-    verbose_name_plural = model._meta.verbose_name_plural
+    verbose_name_plural = get_verbose_name_plural(model)
 
     @mcp_server.tool(description=f"List {verbose_name_plural}")
     def list_model_instances(limit: int = 10, offset: int = 0) -> list[dict[str, Any]]:
@@ -124,17 +132,17 @@ def register_model_list_tool(model: type[Model], prefix: str, **kwargs: Any) -> 
     list_model_instances.__name__ = f"list_{prefix}_instances"
 
 
-def register_model_search_tool(model: type[Model], prefix: str, **kwargs: Any) -> None:
+def register_model_search_tool(model: type[Model], prefix: str, **_kwargs: Any) -> None:
     """
     Register a tool to search model instances.
 
     Args:
         model: Django model class
         prefix: Prefix for the tool name
-        **kwargs: Additional kwargs for tool registration
+        **_kwargs: Additional kwargs for tool registration (not used)
     """
     mcp_server = get_mcp_server()
-    verbose_name_plural = model._meta.verbose_name_plural
+    verbose_name_plural = get_verbose_name_plural(model)
 
     @mcp_server.tool(description=f"Search for {verbose_name_plural}")
     def search_model_instances(query: str, limit: int = 10) -> list[dict[str, Any]]:
@@ -147,7 +155,7 @@ def register_model_search_tool(model: type[Model], prefix: str, **kwargs: Any) -
         """
         # Build Q objects for text fields
         q_objects = Q()
-        for field in model._meta.fields:
+        for field in get_model_fields(model):
             if isinstance(field, models.CharField | models.TextField):
                 q_objects |= Q(**{f"{field.name}__icontains": query})
 
@@ -162,14 +170,14 @@ def register_model_search_tool(model: type[Model], prefix: str, **kwargs: Any) -
     search_model_instances.__name__ = f"search_{prefix}_instances"
 
 
-def register_model_create_tool(model: type[Model], prefix: str, **kwargs: Any) -> None:
+def register_model_create_tool(model: type[Model], prefix: str, **_kwargs: Any) -> None:
     """
     Register a tool for creating model instances.
 
     Args:
         model: Django model class
         prefix: Prefix for tool name
-        **kwargs: Additional kwargs for tool registration
+        **_kwargs: Additional kwargs for tool registration (not used)
     """
     try:
         mcp_server = get_mcp_server()
@@ -178,8 +186,8 @@ def register_model_create_tool(model: type[Model], prefix: str, **kwargs: Any) -
         return
 
     # Get model info
-    verbose_name = model._meta.verbose_name
-    model_name = model._meta.model_name
+    verbose_name = get_verbose_name(model)
+    model_name = get_model_name(model)
 
     # Tool name with prefix
     tool_name = f"{prefix}create_{model_name}" if prefix else f"create_{model_name}"
@@ -197,7 +205,7 @@ def register_model_create_tool(model: type[Model], prefix: str, **kwargs: Any) -
             Dictionary with created instance data
         """
         # Validate fields - only accept valid model fields
-        valid_fields = {field.name for field in model._meta.fields if field.name != "id" and not field.primary_key}
+        valid_fields = set(get_model_field_names(model, exclude_pk=True))
 
         # Filter out invalid fields
         filtered_kwargs = {key: value for key, value in kwargs.items() if key in valid_fields}
@@ -231,8 +239,8 @@ def register_model_resource(
         return
 
     # Create URI template based on app and model
-    app_label = model._meta.app_label
-    model_name = model._meta.model_name
+    app_label = get_app_label(model)
+    model_name = get_model_name(model)
     uri_template = f"{app_label}://{{{lookup}}}"
 
     # Define the resource function with a parameter that matches the URI template
@@ -254,9 +262,9 @@ def register_model_resource(
 
             # Format as Markdown for better LLM consumption
             md_lines = [
-                f"# {model._meta.verbose_name.title()}: {instance}",
+                f"# {get_verbose_name(model).title()}: {instance}",
                 "",
-                f"Information about this {model._meta.verbose_name}.",
+                f"Information about this {get_verbose_name(model)}.",
                 "",
                 "## Attributes",
                 "",
@@ -272,9 +280,9 @@ def register_model_resource(
 
             return "\n".join(md_lines)
         except model.DoesNotExist:
-            return f"# Not Found\n\nThe {model._meta.verbose_name} with {lookup}={pk} does not exist."
+            return f"# Not Found\n\nThe {get_verbose_name(model)} with {lookup}={pk} does not exist."
         except Exception as e:
-            return f"# Error\n\nError retrieving {model._meta.verbose_name}: {e!s}"
+            return f"# Error\n\nError retrieving {get_verbose_name(model)}: {e!s}"
 
     # Rename the function to avoid name collisions
     get_model_resource.__name__ = f"get_{model_name}_resource"
@@ -293,7 +301,7 @@ def _instance_to_dict(instance: Model) -> dict[str, Any]:
     result = {}
 
     # Get all fields from the model
-    fields = instance._meta.fields
+    fields = get_model_fields(instance)
 
     # Add each field to the result
     for field in fields:

@@ -6,6 +6,7 @@ This command shows all registered MCP tools, resources, and prompts.
 
 from django.core.management.base import BaseCommand
 
+from django_mcp.inspection import get_prompts, get_resources, get_tools
 from django_mcp.server import get_mcp_server
 
 
@@ -25,7 +26,7 @@ class Command(BaseCommand):
             help="Component type to inspect (default: all)",
         )
 
-    def handle(self, *args, **options):
+    def handle(self, **options):
         """Execute the command."""
         # Get format option
         output_format = options["format"]
@@ -43,19 +44,18 @@ class Command(BaseCommand):
 
         # Get MCP components
         if component_type in ["all", "tools"]:
-            self._inspect_tools(mcp_server, output_format)
+            self._inspect_tools(output_format)
 
         if component_type in ["all", "resources"]:
-            self._inspect_resources(mcp_server, output_format)
+            self._inspect_resources(output_format)
 
         if component_type in ["all", "prompts"]:
-            self._inspect_prompts(mcp_server, output_format)
+            self._inspect_prompts(output_format)
 
-    def _inspect_tools(self, mcp_server, output_format):
+    def _inspect_tools(self, output_format):
         """Inspect MCP tools."""
-        # Access private managers - this is safe as we know the implementation
-        # In a normal application we'd use public APIs, but FastMCP doesn't expose these
-        tools = list(mcp_server._tool_manager.tools.values())
+        # Use the inspection module instead of accessing private members
+        tools = get_tools()
 
         if output_format == "json":
             import json
@@ -83,13 +83,14 @@ class Command(BaseCommand):
                 for param in tool.parameters:
                     required = "(required)" if param.get("required", False) else "(optional)"
                     self.stdout.write(
-                        f"      - {param['name']} ({param.get('type', 'any')}) {required}: {param.get('description', '')}"
+                        f"      - {param['name']} ({param.get('type', 'any')}) {required}: "
+                        f"{param.get('description', '')}"
                     )
 
-    def _inspect_resources(self, mcp_server, output_format):
+    def _inspect_resources(self, output_format):
         """Inspect MCP resources."""
-        # Access private managers - this is safe as we know the implementation
-        resources = list(mcp_server._resource_manager.resources.values())
+        # Use the inspection module instead of accessing private members
+        resources = get_resources()
 
         if output_format == "json":
             import json
@@ -112,10 +113,10 @@ class Command(BaseCommand):
         for resource in resources:
             self.stdout.write(f"  - {resource.uri_template}: {resource.description}")
 
-    def _inspect_prompts(self, mcp_server, output_format):
+    def _inspect_prompts(self, output_format):
         """Inspect MCP prompts."""
-        # Access private managers - this is safe as we know the implementation
-        prompts = list(mcp_server._prompt_manager.prompts.values())
+        # Use the inspection module instead of accessing private members
+        prompts = get_prompts()
 
         if output_format == "json":
             import json

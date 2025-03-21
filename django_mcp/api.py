@@ -4,10 +4,14 @@ High-level API for django-mcp.
 This module provides a simplified API for common MCP operations.
 """
 
+import asyncio
 from collections.abc import Callable
+from functools import wraps
 import inspect
+import logging
 from typing import Any, TypeVar
 
+from django_mcp.api_inspection import set_function_attribute
 from django_mcp.context import Context
 from django_mcp.server import get_mcp_server
 
@@ -15,183 +19,212 @@ from django_mcp.server import get_mcp_server
 T = TypeVar("T")
 F = TypeVar("F", bound=Callable[..., Any])
 
+# Logger for MCP API
+logger = logging.getLogger("django_mcp.api")
 
-def tool(name: str | None = None, description: str | None = None, is_async: bool = False) -> Callable[[F], F]:
+
+def tool(name: str | None = None, description: str | None = None) -> Callable[[F], F]:
     """
-    Decorator to register a function as an MCP tool.
+    Register a tool with the MCP server.
+
+    This decorator can be applied to any function to expose it as an MCP tool.
 
     Args:
-        name: Optional name for the tool. If not provided, the function name will be used.
-        description: Optional description for the tool. If not provided, the function's docstring will be used.
-        is_async: Whether the tool function is asynchronous.
+        name: Optional name for the tool (defaults to function name)
+        description: Optional description for the tool (defaults to docstring)
 
     Returns:
-        The decorated function.
-
-    Example:
-        @tool(description="Get the current user info")
-        def get_user_info(context: Context) -> Dict[str, Any]:
-            return {"username": context.user.username if context.user else None}
+        Decorator function
     """
 
     def decorator(func: F) -> F:
-        # Tool name from function name if not provided
+        # Check if it's an async function
+        is_async = asyncio.iscoroutinefunction(func)
+
+        # Extract tool information
         tool_name = name or func.__name__
-        # Description from docstring if not provided
         tool_description = description or (func.__doc__ or "").strip()
 
-        # Get the parameters from function signature
+        # Extract parameters from function signature
         sig = inspect.signature(func)
         parameters = []
 
-        for param_name, param in list(sig.parameters.items())[1:]:  # Skip 'context' param
-            param_type = "string"  # Default type
-            param_desc = ""
-            is_required = param.default == inspect.Parameter.empty
+        for param_name, param in sig.parameters.items():
+            # Skip self, cls, and context parameters
+            if param_name in ("self", "cls", "context") or param_name.startswith("_"):
+                continue
 
             # Get parameter type from type annotation if available
+            param_type = "string"  # default
             if param.annotation != inspect.Parameter.empty:
-                if param.annotation == str:
+                if param.annotation is str:
                     param_type = "string"
-                elif param.annotation == int:
+                elif param.annotation is int:
                     param_type = "integer"
-                elif param.annotation == float:
+                elif param.annotation is float:
                     param_type = "number"
-                elif param.annotation == bool:
+                elif param.annotation is bool:
                     param_type = "boolean"
                 elif param.annotation in (dict, dict):
                     param_type = "object"
                 elif param.annotation in (list, list):
                     param_type = "array"
 
+            # Check if parameter is required
+            required = param.default == inspect.Parameter.empty
+
+            # Add parameter info
             parameters.append(
-                {"name": param_name, "type": param_type, "description": param_desc, "required": is_required}
+                {
+                    "name": param_name,
+                    "type": param_type,
+                    "description": "",  # No way to get param descriptions in Python
+                    "required": required,
+                }
             )
 
-        # Register the tool
+        # Register with the MCP server if available
         try:
             mcp_server = get_mcp_server()
+            # Only register if the server is initialized
             if mcp_server:
                 if is_async:
-
-                    async def wrapper(context: Context, **kwargs: Any) -> Any:
-                        return await func(context, **kwargs)
-
-                    mcp_server.register_tool_async(tool_name, wrapper, tool_description, parameters)
+                    mcp_server.register_tool_async(tool_name, func, tool_description, parameters)
                 else:
                     mcp_server.register_tool(tool_name, func, tool_description, parameters)
         except Exception:
             # Server might not be initialized yet, which is fine
             # The discovery will register it when server is initialized
-            pass
+            logger.debug(f"Could not register tool {tool_name} now, will register during discovery")
 
         # Mark the function as an MCP tool for discovery
-        func._mcp_tool = True  # type: ignore
-        func._mcp_tool_name = tool_name  # type: ignore
-        func._mcp_tool_description = tool_description  # type: ignore
-        func._mcp_tool_parameters = parameters  # type: ignore
-        func._mcp_tool_is_async = is_async  # type: ignore
+        func = set_function_attribute(func, "tool", True)
+        func = set_function_attribute(func, "tool_name", tool_name)
+        func = set_function_attribute(func, "tool_description", tool_description)
+        func = set_function_attribute(func, "tool_parameters", parameters)
+        func = set_function_attribute(func, "tool_is_async", is_async)
 
         return func
 
     return decorator
 
 
-def prompt(name: str | None = None, description: str | None = None, is_async: bool = False) -> Callable[[F], F]:
+def prompt(name: str | None = None, description: str | None = None) -> Callable[[F], F]:
     """
-    Decorator to register a function as an MCP prompt.
+    Register a prompt with the MCP server.
+
+    This decorator can be applied to any function to expose it as an MCP prompt.
 
     Args:
-        name: Optional name for the prompt. If not provided, the function name will be used.
-        description: Optional description for the prompt. If not provided, the function's docstring will be used.
-        is_async: Whether the prompt function is asynchronous.
+        name: Optional name for the prompt (defaults to function name)
+        description: Optional description for the prompt (defaults to docstring)
 
     Returns:
-        The decorated function.
-
-    Example:
-        @prompt(description="Generate a greeting message")
-        def greeting(context: Context, name: str) -> str:
-            return f"Hello, {name}!"
+        Decorator function
     """
 
     def decorator(func: F) -> F:
-        # Prompt name from function name if not provided
+        # Check if it's an async function
+        is_async = asyncio.iscoroutinefunction(func)
+
+        # Extract prompt information
         prompt_name = name or func.__name__
-        # Description from docstring if not provided
         prompt_description = description or (func.__doc__ or "").strip()
 
-        # Get the arguments from function signature
+        # Extract arguments from function signature
         sig = inspect.signature(func)
         arguments = []
 
-        for param_name, param in list(sig.parameters.items())[1:]:  # Skip 'context' param
-            param_desc = ""
-            is_required = param.default == inspect.Parameter.empty
+        for param_name, param in sig.parameters.items():
+            # Skip self, cls parameters
+            if param_name in ("self", "cls") or param_name.startswith("_"):
+                continue
 
-            arguments.append({"name": param_name, "description": param_desc, "required": is_required})
+            # Check if parameter is required
+            required = param.default == inspect.Parameter.empty
 
-        # Register the prompt
+            # Add argument info
+            arguments.append(
+                {
+                    "name": param_name,
+                    "description": "",  # No way to get param descriptions in Python
+                    "required": required,
+                }
+            )
+
+        # Create a wrapper that handles the prompt format conversion
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            # Call the original function
+            result = func(*args, **kwargs)
+
+            # Return as string if not already in the right format
+            if not isinstance(result, (dict, list)):
+                return str(result)
+            return result
+
+        # For async functions
+        @wraps(func)
+        async def async_wrapper(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            # Call the original function
+            result = await func(*args, **kwargs)
+
+            # Return as string if not already in the right format
+            if not isinstance(result, (dict, list)):
+                return str(result)
+            return result
+
+        # Register with the MCP server if available
         try:
             mcp_server = get_mcp_server()
+            # Only register if the server is initialized
             if mcp_server:
                 if is_async:
-
-                    async def wrapper(context: Context, **kwargs: Any) -> str:
-                        result = await func(context, **kwargs)
-                        return str(result)
-
-                    mcp_server.register_prompt_async(prompt_name, wrapper, prompt_description, arguments)
+                    mcp_server.register_prompt_async(prompt_name, async_wrapper, prompt_description, arguments)
                 else:
-
-                    def wrapper(context: Context, **kwargs: Any) -> str:
-                        result = func(context, **kwargs)
-                        return str(result)
-
                     mcp_server.register_prompt(prompt_name, wrapper, prompt_description, arguments)
         except Exception:
             # Server might not be initialized yet, which is fine
             # The discovery will register it when server is initialized
-            pass
+            logger.debug(f"Could not register prompt {prompt_name} now, will register during discovery")
 
         # Mark the function as an MCP prompt for discovery
-        func._mcp_prompt = True  # type: ignore
-        func._mcp_prompt_name = prompt_name  # type: ignore
-        func._mcp_prompt_description = prompt_description  # type: ignore
-        func._mcp_prompt_arguments = arguments  # type: ignore
-        func._mcp_prompt_is_async = is_async  # type: ignore
+        func = set_function_attribute(func, "prompt", True)
+        func = set_function_attribute(func, "prompt_name", prompt_name)
+        func = set_function_attribute(func, "prompt_description", prompt_description)
+        func = set_function_attribute(func, "prompt_arguments", arguments)
+        func = set_function_attribute(func, "prompt_is_async", is_async)
 
         return func
 
     return decorator
 
 
-def resource(uri_template: str, description: str | None = None, is_async: bool = False) -> Callable[[F], F]:
+def resource(uri_template: str, description: str | None = None) -> Callable[[F], F]:
     """
-    Decorator to register a function as an MCP resource.
+    Register a resource with the MCP server.
+
+    This decorator can be applied to any function to expose it as an MCP resource.
 
     Args:
-        uri_template: URI template for the resource.
-        description: Optional description for the resource. If not provided, the function's docstring will be used.
-        is_async: Whether the resource function is asynchronous.
+        uri_template: URI template for the resource
+        description: Optional description for the resource (defaults to docstring)
 
     Returns:
-        The decorated function.
-
-    Example:
-        @resource(uri_template="user/{id}", description="Get user data")
-        def get_user(context: Context, uri: str) -> Dict[str, Any]:
-            user_id = uri.split('/')[-1]
-            return {"id": user_id, "name": f"User {user_id}"}
+        Decorator function
     """
 
     def decorator(func: F) -> F:
-        # Description from docstring if not provided
+        # Check if it's an async function
+        is_async = asyncio.iscoroutinefunction(func)
+
+        # Extract resource information
         resource_description = description or (func.__doc__ or "").strip()
 
-        # Register the resource
+        # Register with the MCP server if available
         try:
             mcp_server = get_mcp_server()
+            # Only register if the server is initialized
             if mcp_server:
                 if is_async:
                     mcp_server.register_resource_async(uri_template, func, resource_description)
@@ -200,13 +233,13 @@ def resource(uri_template: str, description: str | None = None, is_async: bool =
         except Exception:
             # Server might not be initialized yet, which is fine
             # The discovery will register it when server is initialized
-            pass
+            logger.debug(f"Could not register resource {uri_template} now, will register during discovery")
 
         # Mark the function as an MCP resource for discovery
-        func._mcp_resource = True  # type: ignore
-        func._mcp_resource_uri_template = uri_template  # type: ignore
-        func._mcp_resource_description = resource_description  # type: ignore
-        func._mcp_resource_is_async = is_async  # type: ignore
+        func = set_function_attribute(func, "resource", True)
+        func = set_function_attribute(func, "resource_uri_template", uri_template)
+        func = set_function_attribute(func, "resource_description", resource_description)
+        func = set_function_attribute(func, "resource_is_async", is_async)
 
         return func
 

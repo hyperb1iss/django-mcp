@@ -11,28 +11,31 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
+from django_mcp.api_inspection import get_request_receive, get_request_send
+from django_mcp.inspection import get_prompts, get_resources, get_tools
+from django_mcp.server import get_mcp_server, get_sse_app
 
-async def mcp_sse_view(request: HttpRequest) -> HttpResponse:
+
+async def mcp_sse_view(request: HttpRequest) -> HttpRequest:
     """
-    Handle SSE connections for MCP.
+    Server-Sent Events (SSE) endpoint for the MCP server.
 
-    This view is an ASGI endpoint for the MCP SSE server.
+    This view provides a streaming SSE connection to the MCP server.
 
     Args:
-        request: Django HTTP request
+        request: Django request
 
     Returns:
-        Django HTTP response
+        A streaming HttpResponse with Server-Sent Events
     """
-    from django_mcp.server import get_sse_app
-
+    # Check if SSE is enabled
     try:
         sse_app = get_sse_app()
-    except Exception:
-        return HttpResponse("MCP server not initialized", status=500)
+    except Exception as e:
+        return JsonResponse({"error": f"MCP server not initialized or SSE not available: {e!s}"}, status=500)
 
     # Pass control to the FastMCP SSE app
-    return await sse_app(request.scope, request._receive, request._send)
+    return await sse_app(request.scope, get_request_receive(request), get_request_send(request))
 
 
 @csrf_exempt
@@ -133,3 +136,97 @@ def mcp_dashboard(request: HttpRequest) -> HttpResponse:
             "settings": mcp_settings,
         },
     )
+
+
+@require_http_methods(["GET"])
+def mcp_health_view(request: HttpRequest) -> JsonResponse:
+    """
+    Health check endpoint for the MCP server.
+
+    Args:
+        request: Django request
+
+    Returns:
+        JsonResponse with health check result
+    """
+    try:
+        mcp_server = get_mcp_server()
+        if not mcp_server:
+            return JsonResponse({"status": "error", "message": "MCP server not initialized"}, status=500)
+
+        return JsonResponse(
+            {
+                "status": "ok",
+                "message": "MCP server is healthy",
+                "server_name": mcp_server.name,
+                "server_version": getattr(mcp_server, "version", "unknown"),
+            }
+        )
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": f"Error accessing MCP server: {e!s}"}, status=500)
+
+
+@require_http_methods(["GET"])
+def mcp_info_view(request: HttpRequest) -> JsonResponse:
+    """
+    Information endpoint for the MCP server.
+
+    Args:
+        request: Django request
+
+    Returns:
+        JsonResponse with server information
+    """
+    try:
+        mcp_server = get_mcp_server()
+        if not mcp_server:
+            return JsonResponse({"status": "error", "message": "MCP server not initialized"}, status=500)
+
+        # Get server info
+        info = {
+            "name": mcp_server.name,
+            "version": getattr(mcp_server, "version", "unknown"),
+            "components": {
+                "tools": [],
+                "resources": [],
+                "prompts": [],
+            },
+        }
+
+        # Get component counts
+        # Use the inspection module instead of accessing private members
+        tools = get_tools()
+        resources = get_resources()
+        prompts = get_prompts()
+
+        # Check server version
+        info["components"]["tools"] = [
+            {
+                "name": tool.name,
+                "description": tool.description,
+                "parameters": tool.parameters,
+            }
+            for tool in tools
+        ]
+
+        info["components"]["resources"] = [
+            {
+                "uri_template": resource.uri_template,
+                "description": resource.description,
+            }
+            for resource in resources
+        ]
+
+        info["components"]["prompts"] = [
+            {
+                "name": prompt.name,
+                "description": prompt.description,
+                "arguments": prompt.arguments,
+            }
+            for prompt in prompts
+        ]
+
+        # Convert to JSON-friendly structure
+        return JsonResponse(info)
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": f"Error getting MCP server info: {e!s}"}, status=500)

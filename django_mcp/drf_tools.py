@@ -26,6 +26,7 @@ except ImportError:
 
     DRF_AVAILABLE = False
 
+from django_mcp.inspection import get_model_verbose_name_title, get_verbose_name
 from django_mcp.server import get_mcp_server
 
 
@@ -62,9 +63,12 @@ def register_drf_viewset(viewset_class: Any, **kwargs: Any) -> None:
     model_name = "resource"
     if hasattr(viewset_class, "queryset") and viewset_class.queryset is not None:
         if hasattr(viewset_class.queryset, "model") and viewset_class.queryset.model is not None:
-            model_meta = getattr(viewset_class.queryset.model, "_meta", None)
-            if model_meta and hasattr(model_meta, "verbose_name"):
-                model_name = model_meta.verbose_name
+            model = viewset_class.queryset.model
+            try:
+                model_name = get_verbose_name(model)
+            except (AttributeError, TypeError):
+                # Fallback to default if get_verbose_name fails
+                pass
 
     # Map HTTP methods to actions
     actions = getattr(
@@ -182,7 +186,8 @@ def register_serializer_resource(
                 serializer = serializer_class(instance)
 
                 # Format as Markdown
-                md_lines = [f"# {model_class._meta.verbose_name.title()}: {instance}", "", "## Serialized Data", ""]
+                verbose_name_title = get_model_verbose_name_title(model_class)
+                md_lines = [f"# {verbose_name_title}: {instance}", "", "## Serialized Data", ""]
 
                 # Add serialized fields
                 for field, value in serializer.data.items():

@@ -27,7 +27,7 @@ class Command(BaseCommand):
         parser.add_argument("--no-discovery", action="store_true", help="Disable auto-discovery of MCP components")
         parser.add_argument("--reload", action="store_true", help="Auto-reload server on code changes")
 
-    def handle(self, *args, **options):
+    def handle(self, **options):
         """Execute the command."""
         # Validate settings
         warnings = validate_settings()
@@ -60,7 +60,12 @@ class Command(BaseCommand):
             return
 
         # Setup signal handling for graceful shutdown
-        def signal_handler(sig, frame):
+        def signal_handler(*_):
+            """Handle termination signals gracefully.
+
+            Args:
+                *_: Captures and ignores all signal handler arguments
+            """
             self.stdout.write(self.style.WARNING("\nShutting down MCP server..."))
             mcp_server.stop()
             sys.exit(0)

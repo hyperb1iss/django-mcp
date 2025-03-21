@@ -1,158 +1,207 @@
 """
-Admin integration for Django-MCP.
+Django admin integration utilities for Django-MCP.
 
-This module provides functionality for exposing Django admin actions
-and functionality as MCP tools and resources.
+This module provides functions for exposing Django admin functionality as MCP tools and resources.
 """
 
 from typing import Any
 
+from django.contrib.admin import AdminSite
 from django.contrib.admin.options import ModelAdmin
-from django.contrib.admin.sites import AdminSite
 from django.db.models import Model
-from django.http import HttpRequest
 
+from django_mcp.api_inspection import get_admin_site_registry
+from django_mcp.inspection import (
+    get_app_label,
+    get_model_name,
+    get_verbose_name,
+    get_verbose_name_plural,
+)
 from django_mcp.server import get_mcp_server
 
 
 def register_admin_tools(
-    admin_class: type[ModelAdmin], model: type[Model], exclude_actions: list[str] | None = None, **kwargs: Any
+    admin_class: type[ModelAdmin], model: type[Model], exclude_actions: list[str] | None = None, **_kwargs: Any
 ) -> None:
     """
-    Register tools for Django admin actions for a model.
+    Register tools for a Django admin model.
+
+    This function adds tools that correspond to admin actions for a model.
 
     Args:
-        admin_class: ModelAdmin class
+        admin_class: The ModelAdmin class
         model: Django model class
         exclude_actions: Optional list of actions to exclude
-        **kwargs: Additional kwargs for tool registration
+        **_kwargs: Additional kwargs (not used)
     """
     try:
-        mcp_server = get_mcp_server()
+        get_mcp_server()
     except Exception:
         # Server not initialized yet
         return
 
     # Get model info
-    model_name = model._meta.model_name
-    verbose_name = model._meta.verbose_name
+    model_name = get_model_name(model)
+    verbose_name = get_verbose_name(model)
 
     # Get admin actions
     actions = getattr(admin_class, "actions", [])
     if exclude_actions is None:
-        exclude_actions = ["delete_selected"]  # Exclude delete by default for safety
+        exclude_actions = []
 
-    # Register a tool for each action
-    for action_name in actions:
-        # Skip excluded actions
-        if action_name in exclude_actions:
+    for action in actions:
+        if action in exclude_actions:
             continue
 
-        # Get the action
-        action = getattr(admin_class, action_name)
+        # Get action details
+        action_name = getattr(action, "short_description", action.__name__.replace("_", " ").lower())
+        action_name_slug = action.__name__
 
-        # Get action description
-        description = getattr(action, "short_description", action_name.replace("_", " ").title())
-
-        # Create the tool function
-        @mcp_server.tool(description=f"Admin action: {description} for {verbose_name}")
-        def admin_action_tool(
-            ids: list[int],
-            _action_name: str = action_name,
-            _model: type[Model] = model,
-            _admin_class: type[ModelAdmin] = admin_class,
-        ) -> dict[str, Any]:
-            """
-            Execute admin action on selected objects.
-
-            Args:
-                ids: List of object IDs to act upon
-            """
-            # Get action function (bound to admin class)
-            admin_instance = _admin_class(model=_model, admin_site=AdminSite())
-            action_func = getattr(admin_instance, _action_name)
-
-            # Get QuerySet of objects
-            queryset = _model.objects.filter(pk__in=ids)
-
-            # Create fake request (needed by many admin actions)
-            request = _create_fake_request()
-
-            # Execute the action
-            response = action_func(request, queryset)
-
-            return {
-                "success": True,
-                "action": _action_name,
-                "affected_count": queryset.count(),
-                "result": str(response) if response else "Action executed successfully",
-            }
-
-        # Rename the function to avoid name collisions
-        admin_action_tool.__name__ = f"admin_{model_name}_{action_name}"
+        # Register as MCP tool
+        _register_admin_action_tool(
+            model=model,
+            model_name=model_name,
+            verbose_name=verbose_name,
+            action=action,
+            action_name=action_name,
+            action_name_slug=action_name_slug,
+        )
 
 
-def register_admin_site(admin_site: AdminSite, **kwargs: Any) -> None:
-    """
-    Register tools for a Django admin site.
-
-    This creates more general admin tools, such as listing
-    all models or accessing admin views.
-
-    Args:
-        admin_site: Django AdminSite instance
-        **kwargs: Additional kwargs for tool registration
-    """
+def _register_admin_action_tool(
+    model: type[Model],
+    model_name: str,
+    verbose_name: str,
+    action: Any,
+    action_name: str,
+    action_name_slug: str,
+) -> None:
+    """Register an admin action as an MCP tool."""
     try:
         mcp_server = get_mcp_server()
     except Exception:
         # Server not initialized yet
         return
 
-    # Register tool to list all models in admin
-    @mcp_server.tool(description="List all models in the admin site")
-    def list_admin_models() -> list[dict[str, Any]]:
+    @mcp_server.tool(description=f"Execute admin '{action_name}' action on {verbose_name}")
+    def admin_action_tool(id: int) -> str:
         """
-        List all models available in the admin site.
+        Execute an admin action on a model instance.
+
+        Args:
+            id: Instance ID to operate on
+
+        Returns:
+            Result of the action
+        """
+        # Get the instance
+        try:
+            instance = model.objects.get(pk=id)
+            # Execute the action
+            result = action(None, None, [instance])
+            if result:
+                return result
+            return f"Admin action '{action_name}' executed successfully on {verbose_name} {id}"
+        except Exception as e:
+            return f"Error executing admin action: {e!s}"
+
+    # Rename to avoid collisions
+    admin_action_tool.__name__ = f"admin_{model_name}_{action_name_slug}"
+
+
+def register_admin_site(admin_site: AdminSite, **_kwargs: Any) -> None:
+    """
+    Register tools for a Django admin site.
+
+    Args:
+        admin_site: Django admin site instance
+        **_kwargs: Additional kwargs (not used)
+    """
+    # Create tools for model counts
+    try:
+        mcp_server = get_mcp_server()
+    except Exception:
+        # Server not initialized yet
+        return
+
+    # Register a tool to get admin model information
+    @mcp_server.tool(description="Get admin model information")
+    def admin_models() -> list[dict[str, Any]]:
+        """
+        Get information about all models registered in the admin.
+
+        Returns:
+            List of models with their admin URLs and counts
         """
         result = []
 
-        for model, model_admin in admin_site._registry.items():
+        for model, model_admin in get_admin_site_registry(admin_site).items():
             model_info = {
-                "app_label": model._meta.app_label,
-                "model_name": model._meta.model_name,
-                "verbose_name": str(model._meta.verbose_name),
-                "verbose_name_plural": str(model._meta.verbose_name_plural),
-                "admin_url": f"/admin/{model._meta.app_label}/{model._meta.model_name}/",
+                "app_label": get_app_label(model),
+                "model_name": get_model_name(model),
+                "verbose_name": str(get_verbose_name(model)),
+                "verbose_name_plural": str(get_verbose_name_plural(model)),
+                "admin_url": f"/admin/{get_app_label(model)}/{get_model_name(model)}/",
                 "count": model.objects.count(),
                 "actions": [
                     {
-                        "name": action_name,
-                        "description": getattr(
-                            getattr(model_admin, action_name, None),
-                            "short_description",
-                            action_name.replace("_", " ").title(),
-                        ),
+                        "name": getattr(action, "short_description", action.__name__.replace("_", " ").lower()),
+                        "method": action.__name__,
                     }
-                    for action_name in getattr(model_admin, "actions", [])
-                    if action_name != "delete_selected"  # Skip delete for safety
+                    for action in getattr(model_admin, "actions", [])
                 ],
+                "list_display": getattr(model_admin, "list_display", ["__str__"]),
+                "search_fields": getattr(model_admin, "search_fields", []),
+                "list_filter": getattr(model_admin, "list_filter", []),
             }
             result.append(model_info)
 
-        return result
+        return sorted(result, key=lambda x: f"{x['app_label']}.{x['model_name']}")
+
+    # Also register as a resource
+    @mcp_server.resource("admin://models")
+    def admin_models_resource() -> str:
+        """
+        Get information about all models registered in the admin.
+
+        Returns:
+            Markdown representation of admin models
+        """
+        models_info = admin_models()
+
+        # Format as Markdown
+        result = [
+            "# Django Admin Models",
+            "",
+            "This resource provides information about all models in the Django admin.",
+            "",
+        ]
+
+        for model_info in models_info:
+            result.append(f"## {model_info['verbose_name_plural']}")
+            result.append("")
+            result.append(f"- **App**: {model_info['app_label']}")
+            result.append(f"- **Model**: {model_info['model_name']}")
+            result.append(f"- **Count**: {model_info['count']}")
+            result.append(f"- **Admin URL**: {model_info['admin_url']}")
+            result.append("")
+
+        return "\n".join(result)
 
 
-def register_admin_model_resource(admin_class: type[ModelAdmin], model: type[Model], **kwargs: Any) -> None:
+def register_admin_resource(
+    model: type[Model],
+    admin_class: type[ModelAdmin] | None = None,
+    prefix: str | None = None,
+    **kwargs: Any,
+) -> None:
     """
-    Register a resource for an admin model.
-
-    This creates a resource that returns the model's admin metadata,
-    including available fields, list display, and actions.
+    Register a resource that provides information about a model's admin configuration.
 
     Args:
-        admin_class: ModelAdmin class
         model: Django model class
+        admin_class: Optional ModelAdmin class
+        prefix: Optional prefix for the resource URI
         **kwargs: Additional kwargs for resource registration
     """
     try:
@@ -162,71 +211,60 @@ def register_admin_model_resource(admin_class: type[ModelAdmin], model: type[Mod
         return
 
     # Get model info
-    app_label = model._meta.app_label
-    model_name = model._meta.model_name
+    app_label = get_app_label(model)
+    model_name = get_model_name(model)
 
     # Create resource URI template
-    uri_template = f"admin://{app_label}/{model_name}"
+    if prefix:
+        uri_template = f"{prefix}admin://{app_label}/{model_name}"
+    else:
+        uri_template = f"admin://{app_label}/{model_name}"
 
+    # Register resource
     @mcp_server.resource(uri_template, **kwargs)
-    def get_admin_model_resource() -> str:
+    def get_admin_configuration() -> str:
         """
-        Get admin metadata for a model.
+        Get admin configuration for a model.
+
+        Returns:
+            Markdown representation of admin configuration
         """
-        # Create instance of admin class
-        admin_instance = admin_class(model=model, admin_site=AdminSite())
-
-        # Get admin metadata
-        list_display = getattr(admin_instance, "list_display", ("__str__",))
-        list_filter = getattr(admin_instance, "list_filter", ())
-        search_fields = getattr(admin_instance, "search_fields", ())
-        actions = getattr(admin_instance, "actions", [])
-
         # Format as Markdown for better LLM consumption
         result = [
-            f"# Admin for {model._meta.verbose_name_plural}",
+            f"# Admin for {get_verbose_name_plural(model)}",
             "",
-            f"This resource describes the admin configuration for {model._meta.verbose_name_plural}.",
+            f"This resource describes the admin configuration for {get_verbose_name_plural(model)}.",
             "",
             "## Display Configuration",
             "",
-            f"- **List Display**: {', '.join(list_display)}",
-            f"- **List Filter**: {', '.join(list_filter)}",
-            f"- **Search Fields**: {', '.join(search_fields)}",
-            "",
-            "## Available Actions",
-            "",
         ]
 
-        # Add actions
-        for action_name in actions:
-            action = getattr(admin_instance, action_name, None)
-            if action:
-                description = getattr(action, "short_description", action_name.replace("_", " ").title())
-                result.append(f"- **{action_name}**: {description}")
+        if admin_class:
+            # Add admin configuration
+            if hasattr(admin_class, "list_display"):
+                result.append("### List Display")
+                result.append("")
+                for field in admin_class.list_display:
+                    result.append(f"- {field}")
+                result.append("")
+
+            if hasattr(admin_class, "list_filter"):
+                result.append("### List Filters")
+                result.append("")
+                for field in admin_class.list_filter:
+                    result.append(f"- {field}")
+                result.append("")
+
+            if hasattr(admin_class, "search_fields"):
+                result.append("### Search Fields")
+                result.append("")
+                for field in admin_class.search_fields:
+                    result.append(f"- {field}")
+                result.append("")
 
         # Add model count
         count = model.objects.count()
         result.append("")
-        result.append(f"Total {model._meta.verbose_name_plural}: {count}")
+        result.append(f"Total {get_verbose_name_plural(model)}: {count}")
 
         return "\n".join(result)
-
-
-def _create_fake_request() -> HttpRequest:
-    """
-    Create a fake HTTP request for admin actions.
-
-    Many admin actions require a request object, so we create a minimal one.
-
-    Returns:
-        A minimal HttpRequest object
-    """
-    from django.contrib.auth.models import AnonymousUser
-    from django.http import HttpRequest
-
-    request = HttpRequest()
-    request.user = AnonymousUser()
-    request.META = {"SCRIPT_NAME": "", "PATH_INFO": "/"}
-
-    return request
