@@ -1,8 +1,9 @@
 """
-Management command to test MCP components.
+Django management command for testing MCP components.
 
-This command allows testing MCP tools, resources, and prompts directly from the command line.
+This command allows you to invoke tools and prompts directly from the command line.
 """
+# pylint: disable=duplicate-code
 
 import asyncio
 import json
@@ -114,7 +115,7 @@ class Command(BaseCommand):
                 raise CommandError("Invalid JSON in --params") from err
         elif options.get("file"):
             try:
-                with open(options.get("file")) as f:
+                with open(options.get("file"), encoding="utf-8") as f:
                     params = json.load(f)
             except (json.JSONDecodeError, FileNotFoundError) as e:
                 raise CommandError(f"Error reading parameters file: {e!s}") from e
@@ -190,7 +191,7 @@ class Command(BaseCommand):
                 raise CommandError("Invalid JSON in --args") from err
         elif options.get("file"):
             try:
-                with open(options.get("file")) as f:
+                with open(options.get("file"), encoding="utf-8") as f:
                     args = json.load(f)
             except (json.JSONDecodeError, FileNotFoundError) as e:
                 raise CommandError(f"Error reading arguments file: {e!s}") from e

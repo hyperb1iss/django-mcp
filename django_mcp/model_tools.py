@@ -1,8 +1,9 @@
 """
-Model integration utilities for Django-MCP.
+Django model integration for django-mcp.
 
-This module provides functions for exposing Django models as MCP tools and resources.
+This module provides utilities for exposing Django models as MCP tools and resources.
 """
+# pylint: disable=duplicate-code
 
 from typing import Any
 
@@ -87,18 +88,18 @@ def register_model_get_tool(model: type[Model], prefix: str, **_kwargs: Any) -> 
     verbose_name = get_verbose_name(model)
 
     @mcp_server.tool(description=f"Get a {verbose_name} by ID")
-    def get_model_instance(id: int) -> dict[str, Any]:
+    def get_model_instance(instance_id: int) -> dict[str, Any]:
         """
         Get a single instance of {verbose_name} by ID.
 
         Args:
-            id: The primary key of the {verbose_name} to retrieve
+            instance_id: The primary key of the {verbose_name} to retrieve
         """
         try:
-            instance = model.objects.get(pk=id)
+            instance = model.objects.get(pk=instance_id)
             return _instance_to_dict(instance)
         except model.DoesNotExist:
-            return {"error": f"{verbose_name.title()} with ID {id} not found"}
+            return {"error": f"{verbose_name.title()} with ID {instance_id} not found"}
 
     # Rename the function to avoid name collisions
     get_model_instance.__name__ = f"get_{prefix}_instance"

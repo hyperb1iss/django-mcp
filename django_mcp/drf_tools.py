@@ -47,11 +47,11 @@ def register_drf_viewset(viewset_class: Any, **_kwargs: Any) -> None:
     # Skip if not a ViewSet
     try:
         if not issubclass(viewset_class, ViewSet):
-            logging.debug(f"{viewset_class} is not a ViewSet, skipping")
+            logging.debug("%s is not a ViewSet, skipping", viewset_class)
             return
     except TypeError:
         # Handle case where viewset_class is not actually a class (e.g. in tests)
-        logging.debug(f"{viewset_class} is not a class, skipping")
+        logging.debug("%s is not a class, skipping", viewset_class)
         return
 
     try:
@@ -75,7 +75,7 @@ def register_drf_viewset(viewset_class: Any, **_kwargs: Any) -> None:
         {"get": "retrieve", "post": "create", "put": "update", "patch": "partial_update", "delete": "destroy"},
     )
 
-    # Skip head and options
+    # Skip methods like HEAD and OPTIONS
     skip_methods = {"head", "options"}
 
     # Register a tool for each action
@@ -83,54 +83,69 @@ def register_drf_viewset(viewset_class: Any, **_kwargs: Any) -> None:
         if method.lower() in skip_methods:
             continue
 
-        # Get parameters for the action
-        _get_parameters_for_action(viewset_class, action, method)
+        # Create a new tool function for this action
+        _register_drf_action_tool(mcp_server, viewset_class, model_name, method, action)
 
-        # Create the tool function
-        @mcp_server.tool(
-            description=f"API action: {action} {model_name}", name=f"api_{model_name.replace(' ', '_')}_{action}"
-        )
-        def drf_action_tool(
-            _method: str = method, _action: str = action, _viewset_class: Any = viewset_class, **params: Any
-        ) -> Any:
-            """
-            Execute a DRF ViewSet action.
 
-            Args:
-                _method: HTTP method
-                _action: ViewSet action
-                _viewset_class: ViewSet class
-                **params: Action parameters
-            """
-            # Create viewset instance
-            try:
-                viewset = _viewset_class()
-            except Exception as e:
-                return {"error": f"Failed to instantiate ViewSet: {e!s}"}
+def _register_drf_action_tool(mcp_server: Any, viewset_class: Any, model_name: str, method: str, action: str) -> None:
+    """
+    Register a tool for a specific DRF action.
 
-            # Get the action method
-            action_method = getattr(viewset, _action, None)
-            if not action_method:
-                return {"error": f"Action {_action} not found on ViewSet"}
+    Args:
+        mcp_server: The MCP server
+        viewset_class: The ViewSet class
+        model_name: The model name
+        method: The HTTP method
+        action: The ViewSet action
+    """
+    # Get parameters for the action
+    _get_parameters_for_action(viewset_class, action, method)
 
-            # Create request object
-            request = _create_request(_method)
+    # Create the tool function
+    @mcp_server.tool(
+        description=f"API action: {action} {model_name}", name=f"api_{model_name.replace(' ', '_')}_{action}"
+    )
+    def drf_action_tool(
+        _method: str = method, _action: str = action, _viewset_class: Any = viewset_class, **params: Any
+    ) -> Any:
+        """
+        Execute a DRF ViewSet action.
 
-            # Add parameters to request
-            request.data = params
-            request.query_params = params
+        Args:
+            _method: HTTP method
+            _action: ViewSet action
+            _viewset_class: ViewSet class
+            **params: Action parameters
+        """
+        # Create viewset instance
+        try:
+            viewset = _viewset_class()
+        except Exception as e:
+            return {"error": f"Failed to instantiate ViewSet: {e!s}"}
 
-            # Execute the action
-            try:
-                response = action_method(request, **params)
+        # Get the action method
+        action_method = getattr(viewset, _action, None)
+        if not action_method:
+            return {"error": f"Action {_action} not found on ViewSet"}
 
-                # Handle Response objects
-                if hasattr(response, "data"):
-                    return response.data
+        # Create request object
+        request = _create_request(_method)
 
-                return response
-            except Exception as e:
-                return {"error": f"Error executing action: {e!s}"}
+        # Add parameters to request
+        request.data = params
+        request.query_params = params
+
+        # Execute the action
+        try:
+            response = action_method(request, **params)
+
+            # Handle Response objects
+            if hasattr(response, "data"):
+                return response.data
+
+            return response
+        except Exception as e:
+            return {"error": f"Error executing action: {e!s}"}
 
 
 def register_serializer_resource(
@@ -221,16 +236,19 @@ def _get_parameters_for_action(_viewset_class: Any, action: str, _method: str) -
             {"name": "page", "description": "Page number for pagination", "required": False, "type": "integer"},
             {"name": "limit", "description": "Number of results per page", "required": False, "type": "integer"},
         ]
-    elif action == "retrieve":
+
+    if action == "retrieve":
         return [
             {"name": "id", "description": "ID of the resource to retrieve", "required": True, "type": "integer"},
         ]
-    elif action in {"update", "partial_update"}:
+
+    if action in {"update", "partial_update"}:
         return [
             {"name": "id", "description": "ID of the resource to update", "required": True, "type": "integer"},
             # Fields would be added dynamically in a real implementation
         ]
-    elif action == "destroy":
+
+    if action == "destroy":
         return [
             {"name": "id", "description": "ID of the resource to delete", "required": True, "type": "integer"},
         ]

@@ -33,8 +33,8 @@ def test_mcp_resource_decorator(mock_mcp_server):
     """Test that mcp_resource decorator registers a function as an MCP resource."""
 
     @mcp_resource(uri_template="test://{id}", description="Test resource")
-    def test_func(id):
-        return f"Resource {id}"
+    def test_func(resource_id):
+        return f"Resource {resource_id}"
 
     # Should register the resource with the MCP server
     mock_mcp_server.resource.assert_called_once_with("test://{id}", description="Test resource")

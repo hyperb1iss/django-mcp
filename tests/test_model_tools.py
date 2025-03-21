@@ -76,12 +76,12 @@ def test_model_get_instance_tool():
     model.objects.get.return_value = mock_instance
 
     # Extract the logic from register_model_get_tool directly
-    def get_model_instance(id: int):
-        instance = model.objects.get(pk=id)
+    def get_model_instance(instance_id: int):
+        instance = model.objects.get(pk=instance_id)
         return _instance_to_dict(instance)
 
     # Call the function
-    get_model_instance(id=1)
+    get_model_instance(instance_id=1)
 
     # Check that it tried to get the model instance
     model.objects.get.assert_called_once_with(pk=1)

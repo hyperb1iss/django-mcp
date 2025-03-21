@@ -95,7 +95,7 @@ def tool(name: str | None = None, description: str | None = None) -> Callable[[F
         except Exception:
             # Server might not be initialized yet, which is fine
             # The discovery will register it when server is initialized
-            logger.debug(f"Could not register tool {tool_name} now, will register during discovery")
+            logger.debug("Could not register tool %s now, will register during discovery", tool_name)
 
         # Mark the function as an MCP tool for discovery
         func = set_function_attribute(func, "tool", True)
@@ -184,7 +184,7 @@ def prompt(name: str | None = None, description: str | None = None) -> Callable[
         except Exception:
             # Server might not be initialized yet, which is fine
             # The discovery will register it when server is initialized
-            logger.debug(f"Could not register prompt {prompt_name} now, will register during discovery")
+            logger.debug("Could not register prompt %s now, will register during discovery", prompt_name)
 
         # Mark the function as an MCP prompt for discovery
         func = set_function_attribute(func, "prompt", True)
@@ -229,7 +229,7 @@ def resource(uri_template: str, description: str | None = None) -> Callable[[F],
         except Exception:
             # Server might not be initialized yet, which is fine
             # The discovery will register it when server is initialized
-            logger.debug(f"Could not register resource {uri_template} now, will register during discovery")
+            logger.debug("Could not register resource %s now, will register during discovery", uri_template)
 
         # Mark the function as an MCP resource for discovery
         func = set_function_attribute(func, "resource", True)
@@ -361,7 +361,8 @@ def read_resource(uri: str, context: Context | None = None) -> Any:
     if context is None:
         context = Context()
 
-    return mcp_server.read_resource(uri, context)
+    # The FastMCP.read_resource method doesn't accept a context parameter
+    return mcp_server.read_resource(uri)
 
 
 async def read_resource_async(uri: str, context: Context | None = None) -> Any:
@@ -385,4 +386,5 @@ async def read_resource_async(uri: str, context: Context | None = None) -> Any:
     if context is None:
         context = Context()
 
-    return await mcp_server.read_resource_async(uri, context)
+    # Use the standard read_resource method since read_resource_async doesn't exist
+    return await mcp_server.read_resource(uri)

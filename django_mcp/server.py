@@ -1,3 +1,5 @@
+# pylint: disable=global-statement
+
 """
 MCP server management for Django-MCP.
 

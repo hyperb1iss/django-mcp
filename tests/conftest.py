@@ -71,7 +71,7 @@ def test_model():
         description = models.TextField(blank=True)
 
         def __str__(self):
-            return self.name
+            return str(self.name)
 
         class Meta:
             app_label = "tests"

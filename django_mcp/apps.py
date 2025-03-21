@@ -109,7 +109,7 @@ class DjangoMCPConfig(AppConfig):
             # Log this but don't crash
             import logging
 
-            logging.getLogger("django_mcp").debug(f"Error importing {module_name} from {app_config.name}")
+            logging.getLogger("django_mcp").debug("Error importing %s from %s", module_name, app_config.name)
 
     def _should_skip_initialization(self) -> bool:
         """

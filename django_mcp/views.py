@@ -52,8 +52,6 @@ async def mcp_message_view(request: HttpRequest) -> JsonResponse:
     Returns:
         JSON response with MCP result
     """
-    from django_mcp.server import get_mcp_server
-
     try:
         mcp_server = get_mcp_server()
     except Exception:
@@ -87,8 +85,6 @@ def mcp_dashboard(request: HttpRequest) -> HttpResponse:
         HTML response with MCP dashboard
     """
     from django.shortcuts import render
-
-    from django_mcp.server import get_mcp_server
 
     # Get MCP server (or None if not initialized)
     mcp_server = None

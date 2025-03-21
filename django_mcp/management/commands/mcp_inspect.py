@@ -1,8 +1,11 @@
 """
-Management command to inspect MCP components.
+Django management command for inspecting MCP components.
 
-This command shows all registered MCP tools, resources, and prompts.
+This command allows you to see details about registered tools, resources, and prompts.
 """
+# pylint: disable=duplicate-code
+
+import json
 
 from django.core.management.base import BaseCommand
 
@@ -58,8 +61,6 @@ class Command(BaseCommand):
         tools = get_tools()
 
         if output_format == "json":
-            import json
-
             # Convert tools to serializable format
             tools_data = []
             for tool in tools:
@@ -93,8 +94,6 @@ class Command(BaseCommand):
         resources = get_resources()
 
         if output_format == "json":
-            import json
-
             # Convert resources to serializable format
             resources_data = []
             for resource in resources:
@@ -119,8 +118,6 @@ class Command(BaseCommand):
         prompts = get_prompts()
 
         if output_format == "json":
-            import json
-
             # Convert prompts to serializable format
             prompts_data = []
             for prompt in prompts:

@@ -1,8 +1,9 @@
 """
-Django admin integration utilities for Django-MCP.
+Django admin integration for django-mcp.
 
-This module provides functions for exposing Django admin functionality as MCP tools and resources.
+This module provides utilities for exposing Django admin actions as MCP tools.
 """
+# pylint: disable=duplicate-code
 
 from typing import Any
 
@@ -84,24 +85,24 @@ def _register_admin_action_tool(
         return
 
     @mcp_server.tool(description=f"Execute admin '{action_name}' action on {verbose_name}")
-    def admin_action_tool(id: int) -> str:
+    def admin_action_tool(instance_id: int) -> str:
         """
         Execute an admin action on a model instance.
 
         Args:
-            id: Instance ID to operate on
+            instance_id: Instance ID to operate on
 
         Returns:
             Result of the action
         """
         # Get the instance
         try:
-            instance = model.objects.get(pk=id)
+            instance = model.objects.get(pk=instance_id)
             # Execute the action
             result = action(None, None, [instance])
             if result:
                 return result
-            return f"Admin action '{action_name}' executed successfully on {verbose_name} {id}"
+            return f"Admin action '{action_name}' executed successfully on {verbose_name} {instance_id}"
         except Exception as e:
             return f"Error executing admin action: {e!s}"
 

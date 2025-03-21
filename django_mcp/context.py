@@ -207,12 +207,11 @@ def with_django_context(func: Callable) -> Callable:
             return await func(*args, **kwargs)
 
         return async_wrapper
-    else:
 
-        @wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            if has_context_param and "context" in kwargs:
-                kwargs["context"] = get_django_context(kwargs["context"])
-            return func(*args, **kwargs)
+    @wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        if has_context_param and "context" in kwargs:
+            kwargs["context"] = get_django_context(kwargs["context"])
+        return func(*args, **kwargs)
 
-        return wrapper
+    return wrapper
