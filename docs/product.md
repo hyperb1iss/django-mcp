@@ -1,6 +1,6 @@
 # ✨ Django-MCP Product Document
 
-> *Supercharge your Django apps with AI assistant capabilities through MCP*
+> _Supercharge your Django apps with AI assistant capabilities through MCP_
 
 ![Django-MCP Logo](https://via.placeholder.com/800x200?text=Django-MCP)
 
@@ -196,18 +196,21 @@ application = get_asgi_application()
 ## 🛣️ Roadmap
 
 ### Version 0.1.0 (Alpha)
+
 - Core framework and basic functionality
 - Simple decorator API
 - Basic model integration
 - ASGI integration
 
 ### Version 0.5.0 (Beta)
+
 - Auto-discovery system
 - Admin integration
 - DRF integration
 - More comprehensive model integration
 
 ### Version 1.0.0 (Stable)
+
 - Complete feature set
 - Production-ready performance
 - Comprehensive documentation
@@ -220,4 +223,4 @@ application = get_asgi_application()
 3. **Flexibility**: Allow customization for advanced use cases
 4. **Performance**: Ensure efficient resource usage
 5. **Testing**: Comprehensive test coverage
-6. **Documentation**: Clear, complete documentation with examples 
+6. **Documentation**: Clear, complete documentation with examples

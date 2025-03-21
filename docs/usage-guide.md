@@ -1,6 +1,6 @@
 # 🚀 Django-MCP Usage Guide
 
-> *Transform your Django app into an AI assistant powerhouse*
+> _Transform your Django app into an AI assistant powerhouse_
 
 ![Django-MCP Usage](https://via.placeholder.com/800x200?text=Django-MCP+Usage)
 
@@ -140,7 +140,7 @@ def cancel_order(order_id: int, reason: str = "Customer request") -> dict:
     order.status = "cancelled"
     order.cancellation_reason = reason
     order.save()
-    
+
     return {"success": True, "message": f"Order {order_id} cancelled"}
 ```
 
@@ -156,7 +156,7 @@ from myapp.models import Product
 def get_product_resource(product_id: int) -> str:
     """Get information about a product"""
     product = Product.objects.get(id=product_id)
-    
+
     # Return markdown for better LLM consumption
     return f"""# {product.name}
 
@@ -185,12 +185,12 @@ from django_mcp.decorators import mcp_prompt
 def get_order_summary_prompt(order_id: int) -> str:
     """Generate a prompt for summarizing an order"""
     from myapp.models import Order
-    
+
     order = Order.objects.get(id=order_id)
     items = order.items.all()
-    
+
     items_text = "\n".join([f"- {item.quantity}x {item.product.name}" for item in items])
-    
+
     return f"""Please summarize this order in a friendly, conversational way:
 
 Order #{order.id}
@@ -224,6 +224,7 @@ def product_tools():
 ```
 
 This creates the following tools:
+
 - `get_product_instance` - Get a product by ID
 - `list_product_instances` - List products
 - `search_product_instances` - Search for products
@@ -317,16 +318,16 @@ async def process_data(data: str, ctx: Context) -> str:
     """Process data with progress reporting"""
     # Report progress to the client
     await ctx.report_progress(0, 100)
-    
+
     # Log information
     ctx.info(f"Processing {len(data)} bytes of data")
-    
+
     # Process the data (simulated)
     await asyncio.sleep(1)
     await ctx.report_progress(50, 100)
     await asyncio.sleep(1)
     await ctx.report_progress(100, 100)
-    
+
     return f"Processed {len(data)} bytes of data"
 ```
 
@@ -419,6 +420,7 @@ http://localhost:8000/mcp/dashboard/
 ```
 
 The dashboard shows:
+
 - All registered tools
 - All registered resources
 - All registered prompts
@@ -433,4 +435,4 @@ Now that you've got Django-MCP up and running, here are some next steps:
 2. **Add More Tools**: Identify key functionality in your app to expose as tools
 3. **Create Resources**: Expose your app's data as rich, structured resources
 4. **Integrate with AI Assistants**: Connect your MCP server to Claude or other AI assistants
-5. **Contribute**: Join the community and contribute to Django-MCP! 
+5. **Contribute**: Join the community and contribute to Django-MCP!
