@@ -25,7 +25,7 @@ def get_tools() -> list[dict[str, Any]]:
     """
     mcp_server = get_mcp_server()
     # We access the private members here so the rest of the codebase doesn't have to
-    return list(mcp_server._tool_manager.tools.values())
+    return list(mcp_server._tool_manager.tools.values())  # noqa: SLF001
 
 
 def get_resources() -> list[dict[str, Any]]:
@@ -37,7 +37,7 @@ def get_resources() -> list[dict[str, Any]]:
     """
     mcp_server = get_mcp_server()
     # We access the private members here so the rest of the codebase doesn't have to
-    return list(mcp_server._resource_manager.resources.values())
+    return list(mcp_server._resource_manager.resources.values())  # noqa: SLF001
 
 
 def get_prompts() -> list[dict[str, Any]]:
@@ -49,7 +49,7 @@ def get_prompts() -> list[dict[str, Any]]:
     """
     mcp_server = get_mcp_server()
     # We access the private members here so the rest of the codebase doesn't have to
-    return list(mcp_server._prompt_manager.prompts.values())
+    return list(mcp_server._prompt_manager.prompts.values())  # noqa: SLF001
 
 
 def get_tool(name: str) -> dict[str, Any]:
@@ -67,9 +67,9 @@ def get_tool(name: str) -> dict[str, Any]:
     """
     mcp_server = get_mcp_server()
     # We access the private members here so the rest of the codebase doesn't have to
-    if name not in mcp_server._tool_manager.tools:
+    if name not in mcp_server._tool_manager.tools:  # noqa: SLF001
         raise ValueError(f"Tool '{name}' not found")
-    return mcp_server._tool_manager.tools[name]
+    return mcp_server._tool_manager.tools[name]  # noqa: SLF001
 
 
 def has_tool(name: str) -> bool:
@@ -84,7 +84,7 @@ def has_tool(name: str) -> bool:
     """
     mcp_server = get_mcp_server()
     # We access the private members here so the rest of the codebase doesn't have to
-    return name in mcp_server._tool_manager.tools
+    return name in mcp_server._tool_manager.tools  # noqa: SLF001
 
 
 def match_resource_uri(uri: str) -> dict[str, Any] | None:
@@ -100,7 +100,7 @@ def match_resource_uri(uri: str) -> dict[str, Any] | None:
     mcp_server = get_mcp_server()
 
     # We access the private members here so the rest of the codebase doesn't have to
-    for resource in mcp_server._resource_manager.resources.values():
+    for resource in mcp_server._resource_manager.resources.values():  # noqa: SLF001
         # Basic check - this is not perfect but works for simple cases
         # For real template matching we'd need a proper URI template library
         template_parts = resource.uri_template.split("/")
@@ -139,9 +139,9 @@ def get_prompt(name: str) -> dict[str, Any]:
     """
     mcp_server = get_mcp_server()
     # We access the private members here so the rest of the codebase doesn't have to
-    if name not in mcp_server._prompt_manager.prompts:
+    if name not in mcp_server._prompt_manager.prompts:  # noqa: SLF001
         raise ValueError(f"Prompt '{name}' not found")
-    return mcp_server._prompt_manager.prompts[name]
+    return mcp_server._prompt_manager.prompts[name]  # noqa: SLF001
 
 
 def has_prompt(name: str) -> bool:
@@ -156,7 +156,7 @@ def has_prompt(name: str) -> bool:
     """
     mcp_server = get_mcp_server()
     # We access the private members here so the rest of the codebase doesn't have to
-    return name in mcp_server._prompt_manager.prompts
+    return name in mcp_server._prompt_manager.prompts  # noqa: SLF001
 
 
 # ----------------------
@@ -175,7 +175,7 @@ def get_model_meta(model: type[Model] | Model) -> Any:
         The model's _meta object
     """
     # We access the _meta private member here so the rest of the codebase doesn't have to
-    return model._meta
+    return model._meta  # noqa: SLF001
 
 
 def get_model_name(model: type[Model] | Model) -> str:

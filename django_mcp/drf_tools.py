@@ -5,6 +5,7 @@ This module provides functionality for exposing Django REST Framework
 API endpoints as MCP tools and resources.
 """
 
+import contextlib
 import logging
 from typing import Any
 
@@ -30,13 +31,13 @@ from django_mcp.inspection import get_model_verbose_name_title, get_verbose_name
 from django_mcp.server import get_mcp_server
 
 
-def register_drf_viewset(viewset_class: Any, **kwargs: Any) -> None:
+def register_drf_viewset(viewset_class: Any, **_kwargs: Any) -> None:
     """
     Register tools for a DRF ViewSet class.
 
     Args:
         viewset_class: DRF ViewSet class
-        **kwargs: Additional kwargs for tool registration
+        **_kwargs: Additional kwargs for tool registration (unused)
     """
     # Skip if DRF is not available
     if not DRF_AVAILABLE:
@@ -64,11 +65,8 @@ def register_drf_viewset(viewset_class: Any, **kwargs: Any) -> None:
     if hasattr(viewset_class, "queryset") and viewset_class.queryset is not None:
         if hasattr(viewset_class.queryset, "model") and viewset_class.queryset.model is not None:
             model = viewset_class.queryset.model
-            try:
+            with contextlib.suppress(AttributeError, TypeError):
                 model_name = get_verbose_name(model)
-            except (AttributeError, TypeError):
-                # Fallback to default if get_verbose_name fails
-                pass
 
     # Map HTTP methods to actions
     actions = getattr(
@@ -202,14 +200,14 @@ def register_serializer_resource(
             return "# Error\n\nNo model class available for this serializer."
 
 
-def _get_parameters_for_action(viewset_class: Any, action: str, method: str) -> list[dict[str, Any]]:
+def _get_parameters_for_action(_viewset_class: Any, action: str, _method: str) -> list[dict[str, Any]]:
     """
     Get parameters for a DRF action.
 
     Args:
-        viewset_class: DRF ViewSet class
+        _viewset_class: DRF ViewSet class (unused)
         action: Action name
-        method: HTTP method
+        _method: HTTP method (unused)
 
     Returns:
         List of parameter descriptions

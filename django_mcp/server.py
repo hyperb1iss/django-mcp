@@ -90,7 +90,7 @@ def get_sse_app():
     except ValueError:
         # During testing, we might not have a fully initialized server
         if "pytest" in sys.modules:
-            return lambda scope, receive, send: None
+            return lambda _scope, _receive, _send: None
         raise
 
 

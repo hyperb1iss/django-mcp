@@ -1,8 +1,11 @@
+from importlib import import_module
 import os
 import sys
 
 from django.apps import AppConfig
 from django.utils.module_loading import module_has_submodule
+
+from django_mcp.server import get_mcp_server
 
 
 class DjangoMCPConfig(AppConfig):
@@ -42,8 +45,6 @@ class DjangoMCPConfig(AppConfig):
         configures it based on Django settings.
         """
         from django.conf import settings
-
-        from django_mcp.server import get_mcp_server
 
         # Get server name from settings or use default based on project name
         server_name = getattr(settings, "DJANGO_MCP_SERVER_NAME", self._get_default_server_name())

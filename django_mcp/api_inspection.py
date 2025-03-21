@@ -40,7 +40,7 @@ def get_admin_site_registry(admin_site: AdminSite) -> dict:
         Dictionary mapping models to their admin classes
     """
     # We access the private members here so the rest of the codebase doesn't have to
-    return admin_site._registry
+    return admin_site._registry  # noqa: SLF001
 
 
 def get_request_receive(request: Any) -> Any:
@@ -54,7 +54,7 @@ def get_request_receive(request: Any) -> Any:
         The receive callable
     """
     # We access the private members here so the rest of the codebase doesn't have to
-    return request._receive
+    return request._receive  # noqa: SLF001
 
 
 def get_request_send(request: Any) -> Any:
@@ -68,4 +68,4 @@ def get_request_send(request: Any) -> Any:
         The send callable
     """
     # We access the private members here so the rest of the codebase doesn't have to
-    return request._send
+    return request._send  # noqa: SLF001

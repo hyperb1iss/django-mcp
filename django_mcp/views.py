@@ -101,11 +101,10 @@ def mcp_dashboard(request: HttpRequest) -> HttpResponse:
     prompts = []
 
     if mcp_server:
-        # Access private managers via protected attributes (this is safe as we know the implementation)
-        # In a normal application we'd use public APIs, but FastMCP doesn't expose these as public
-        tools = list(mcp_server._tool_manager.tools.values())
-        resources = list(mcp_server._resource_manager.resources.values())
-        prompts = list(mcp_server._prompt_manager.prompts.values())
+        # Get components using inspection module instead of direct access
+        tools = get_tools()
+        resources = get_resources()
+        prompts = get_prompts()
 
     # Check server version
     server_version = getattr(mcp_server, "version", "Unknown") if mcp_server else "Not initialized"
@@ -139,12 +138,12 @@ def mcp_dashboard(request: HttpRequest) -> HttpResponse:
 
 
 @require_http_methods(["GET"])
-def mcp_health_view(request: HttpRequest) -> JsonResponse:
+def mcp_health_view(_request: HttpRequest) -> JsonResponse:
     """
     Health check endpoint for the MCP server.
 
     Args:
-        request: Django request
+        _request: Django request (unused)
 
     Returns:
         JsonResponse with health check result
@@ -167,12 +166,12 @@ def mcp_health_view(request: HttpRequest) -> JsonResponse:
 
 
 @require_http_methods(["GET"])
-def mcp_info_view(request: HttpRequest) -> JsonResponse:
+def mcp_info_view(_request: HttpRequest) -> JsonResponse:
     """
     Information endpoint for the MCP server.
 
     Args:
-        request: Django request
+        _request: Django request (unused)
 
     Returns:
         JsonResponse with server information

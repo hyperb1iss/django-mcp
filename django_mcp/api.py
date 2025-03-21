@@ -102,9 +102,7 @@ def tool(name: str | None = None, description: str | None = None) -> Callable[[F
         func = set_function_attribute(func, "tool_name", tool_name)
         func = set_function_attribute(func, "tool_description", tool_description)
         func = set_function_attribute(func, "tool_parameters", parameters)
-        func = set_function_attribute(func, "tool_is_async", is_async)
-
-        return func
+        return set_function_attribute(func, "tool_is_async", is_async)
 
     return decorator
 
@@ -159,7 +157,7 @@ def prompt(name: str | None = None, description: str | None = None) -> Callable[
             result = func(*args, **kwargs)
 
             # Return as string if not already in the right format
-            if not isinstance(result, (dict, list)):
+            if not isinstance(result, dict | list):
                 return str(result)
             return result
 
@@ -170,7 +168,7 @@ def prompt(name: str | None = None, description: str | None = None) -> Callable[
             result = await func(*args, **kwargs)
 
             # Return as string if not already in the right format
-            if not isinstance(result, (dict, list)):
+            if not isinstance(result, dict | list):
                 return str(result)
             return result
 
@@ -193,9 +191,7 @@ def prompt(name: str | None = None, description: str | None = None) -> Callable[
         func = set_function_attribute(func, "prompt_name", prompt_name)
         func = set_function_attribute(func, "prompt_description", prompt_description)
         func = set_function_attribute(func, "prompt_arguments", arguments)
-        func = set_function_attribute(func, "prompt_is_async", is_async)
-
-        return func
+        return set_function_attribute(func, "prompt_is_async", is_async)
 
     return decorator
 
@@ -239,9 +235,7 @@ def resource(uri_template: str, description: str | None = None) -> Callable[[F],
         func = set_function_attribute(func, "resource", True)
         func = set_function_attribute(func, "resource_uri_template", uri_template)
         func = set_function_attribute(func, "resource_description", resource_description)
-        func = set_function_attribute(func, "resource_is_async", is_async)
-
-        return func
+        return set_function_attribute(func, "resource_is_async", is_async)
 
     return decorator
 

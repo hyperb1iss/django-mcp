@@ -47,7 +47,8 @@ def test_app_config_initializes_mcp_server():
     with patch("django.apps.config.AppConfig._path_from_module", return_value="/fake/path"):
         app_config = DjangoMCPConfig("django_mcp", MagicMock())
 
-        with patch("django_mcp.server.get_mcp_server") as mock_get_server:
+        # Patch the imported get_mcp_server at the module level
+        with patch("django_mcp.apps.get_mcp_server") as mock_get_server:
             mock_server = MagicMock()
             mock_get_server.return_value = mock_server
 
