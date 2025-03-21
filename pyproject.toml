@@ -17,7 +17,7 @@ classifiers = [
 # Dependencies organized by category
 dependencies = [
     # Core MCP protocol
-    "mcp[cli]>=1.3.0",
+    "mcp[cli]>=1.4.1",
     # UI and display
     "rich>=13.9.4",
     # Networking and HTTP
@@ -26,18 +26,23 @@ dependencies = [
     "sse-starlette>=2.2.1",
     "starlette>=0.46.0",
     "uvicorn>=0.34.0",
+    "django>=5.1.7",
+    "djangorestframework>=3.15.2",
 ]
 
 [dependency-groups]
 dev = [
     # Testing
-    "pytest>=8.3.4",
+    "pytest>=8.3.5",
     "pytest-asyncio>=0.25.3",
     "pytest-cov>=6.0.0",
     # Linting and type checking
-    "mypy>=1.0.0",
-    "pylint>=3.0.0",
-    "ruff>=0.1.0",
+    "mypy>=1.15.0",
+    "pylint>=3.3.6",
+    "ruff>=0.11.1",
+    "django-stubs[compatible-mypy]>=5.1.3",
+    "djlint>=1.36.4",
+    "pytest-django>=4.10.0",
 ]
 sse = ["uvicorn>=0.27.0", "starlette>=0.46.0"]
 
@@ -46,16 +51,12 @@ Homepage = "https://github.com/hyperbliss/django-mcp"
 Issues = "https://github.com/hyperbliss/django-mcp/issues"
 Documentation = "https://github.com/hyperbliss/django-mcp#readme"
 
-[project.scripts]
-django-mcp = "django-mcp.server:main"
-django-mcp-client = "django-mcp.client:main"
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["django-mcp"]
+packages = ["django_mcp"]
 
 # Testing configuration
 [tool.pytest.ini_options]
@@ -105,12 +106,7 @@ pretty = true
 
 # Third-party modules without type stubs
 [[tool.mypy.overrides]]
-module = [
-    "mcp.*",
-    "starlette.*",
-    "uvicorn.*",
-    "sse_starlette.*",
-]
+module = ["mcp.*", "starlette.*", "uvicorn.*", "sse_starlette.*"]
 ignore_missing_imports = true
 
 # Test files can be less strict
@@ -119,13 +115,6 @@ module = ["tests.*"]
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
 check_untyped_defs = false
-
-# Core modules should be very strict
-[[tool.mypy.overrides]]
-module = ["django-mcp.core.*"]
-disallow_any_generics = true
-disallow_any_explicit = true
-warn_unreachable = true
 
 # Code formatting and linting configuration
 [tool.ruff]
@@ -215,7 +204,7 @@ ignore = [
 [tool.ruff.lint.isort]
 combine-as-imports = true
 force-sort-within-sections = true
-known-first-party = ["django-mcp"]
+known-first-party = ["django_mcp"]
 section-order = [
     "future",
     "standard-library",
@@ -229,13 +218,6 @@ section-order = [
 # Ignore unused imports in __init__ files
 "__init__.py" = ["F401", "E402"]
 
-# Allow catching blind exceptions in prompts, resources, and tools 
-"django-mcp/prompts.py" = ["BLE001", "ARG001"]
-"django-mcp/resources/**/*.py" = ["BLE001", "ARG001"]
-"django-mcp/tools/**/*.py" = ["BLE001", "ARG001"]
-
-# Allow accessing private members in server.py for MCP server access
-"django-mcp/server.py" = ["SLF001"]
 
 # More relaxed rules for tests
 "tests/**/*.py" = [
@@ -253,19 +235,6 @@ section-order = [
     "S108",    # Ignore insecure usage of temporary files
     "SLF001",  # Allow private member access in tests
     "BLE001",  # Allow catching blind exceptions in tests
-]
-
-# Module-specific rules
-"django-mcp/security/**/*.py" = [
-    # Enable all security rules for security modules
-]
-
-"django-mcp/adb/**/*.py" = [
-    # Extra security for command execution
-]
-
-"django-mcp/server/**/*.py" = [
-    # Enable stricter async rules
 ]
 
 # Format settings for consistency

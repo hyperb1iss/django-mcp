@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Django-MCP Dashboard</title>
+    <style>
+        :root {
+            --primary: #6f42c1;
+            --primary-light: #9e77e6;
+            --secondary: #fd7e14;
+            --dark: #343a40;
+            --light: #f8f9fa;
+            --medium: #ced4da;
+            --success: #28a745;
+            --danger: #dc3545;
+            --warning: #ffc107;
+            --info: #17a2b8;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--dark);
+            background-color: #f5f5f5;
+            padding: 0;
+            margin: 0;
+        }
+        
+        header {
+            background-color: var(--primary);
+            color: #fff;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        header h1 {
+            font-size: 1.5rem;
+            margin: 0;
+            display: flex;
+            align-items: center;
+        }
+        
+        header h1 svg {
+            margin-right: 0.8rem;
+        }
+        
+        .logo {
+            fill: white;
+            width: 24px;
+            height: 24px;
+        }
+        
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .status-card {
+            background-color: white;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .server-status {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+        
+        .status-active {
+            background-color: var(--success);
+        }
+        
+        .status-inactive {
+            background-color: var(--danger);
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.5rem;
+        }
+        
+        .settings-list {
+            background-color: white;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        dl {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 0.5rem 1rem;
+        }
+        
+        dt {
+            font-weight: bold;
+            opacity: 0.8;
+        }
+        
+        dd {
+            margin-left: 0;
+        }
+        
+        .card {
+            background-color: white;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .card h2 {
+            margin-top: 0;
+            border-bottom: 1px solid var(--medium);
+            padding-bottom: 0.75rem;
+            margin-bottom: 1rem;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+        }
+        
+        .card h2 svg {
+            margin-right: 0.5rem;
+        }
+        
+        .component-list {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+        
+        .component-item {
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--medium);
+        }
+        
+        .component-item:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+        
+        .component-name {
+            font-weight: bold;
+            margin-bottom: 0.25rem;
+        }
+        
+        .component-description {
+            opacity: 0.8;
+            margin-bottom: 0.5rem;
+        }
+        
+        .tag {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            background-color: var(--medium);
+            border-radius: 1rem;
+            font-size: 0.8rem;
+            margin-right: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .tag-async {
+            background-color: var(--info);
+            color: white;
+        }
+        
+        .tag-parameters {
+            background-color: var(--primary-light);
+            color: white;
+        }
+        
+        .empty-message {
+            opacity: 0.7;
+            font-style: italic;
+            padding: 1rem 0;
+        }
+        
+        footer {
+            text-align: center;
+            padding: 1rem;
+            background-color: var(--light);
+            border-top: 1px solid var(--medium);
+            font-size: 0.9rem;
+            color: #666;
+        }
+        
+        .footer-link {
+            color: var(--primary);
+            text-decoration: none;
+        }
+        
+        .footer-link:hover {
+            text-decoration: underline;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+            
+            dl {
+                grid-template-columns: 1fr;
+            }
+            
+            dt {
+                margin-top: 0.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>
+            <svg class="logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+            </svg>
+            Django-MCP Dashboard
+        </h1>
+        <div>
+            <small>Server version: {{ server_version }}</small>
+        </div>
+    </header>
+    
+    <div class="container">
+        <div class="status-card">
+            <div class="server-status">
+                <div class="status-indicator {% if server %}status-active{% else %}status-inactive{% endif %}"></div>
+                <strong>Server Status:</strong> {% if server %}Active{% else %}Inactive{% endif %}
+            </div>
+            <p>
+                {% if server %}
+                MCP server is running and ready to accept connections.
+                {% else %}
+                MCP server is not running. This could be because the app is in a management command, 
+                or because initialization failed.
+                {% endif %}
+            </p>
+        </div>
+        
+        <div class="grid">
+            <div class="settings-list">
+                <h2>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+                    </svg>
+                    Settings
+                </h2>
+                <dl>
+                    {% for key, value in settings.items %}
+                    <dt>{{ key }}</dt>
+                    <dd>{{ value|default:"None" }}</dd>
+                    {% endfor %}
+                </dl>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M22 9V7h-2V5c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-2h2v-2h-2v-2h2v-2h-2V9h2zm-4 10H4V5h14v14zM6 13h5v4H6zm6-6h4v3h-4zm0 4h4v6h-4zm-6-3h5v2H6z"/>
+                </svg>
+                MCP Tools ({{ tools|length }})
+            </h2>
+            {% if tools %}
+            <ul class="component-list">
+                {% for tool in tools %}
+                <li class="component-item">
+                    <div class="component-name">{{ tool.name }}</div>
+                    <div class="component-description">{{ tool.description }}</div>
+                    <div>
+                        {% if tool.is_async %}
+                        <span class="tag tag-async">async</span>
+                        {% endif %}
+                        {% if tool.parameters %}
+                        <span class="tag tag-parameters">{{ tool.parameters|length }} parameters</span>
+                        {% endif %}
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <div class="empty-message">No tools registered.</div>
+            {% endif %}
+        </div>
+        
+        <div class="card">
+            <h2>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>
+                </svg>
+                MCP Resources ({{ resources|length }})
+            </h2>
+            {% if resources %}
+            <ul class="component-list">
+                {% for resource in resources %}
+                <li class="component-item">
+                    <div class="component-name">{{ resource.uri_template }}</div>
+                    <div class="component-description">{{ resource.description }}</div>
+                    <div>
+                        {% if resource.is_async %}
+                        <span class="tag tag-async">async</span>
+                        {% endif %}
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <div class="empty-message">No resources registered.</div>
+            {% endif %}
+        </div>
+        
+        <div class="card">
+            <h2>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/>
+                </svg>
+                MCP Prompts ({{ prompts|length }})
+            </h2>
+            {% if prompts %}
+            <ul class="component-list">
+                {% for prompt in prompts %}
+                <li class="component-item">
+                    <div class="component-name">{{ prompt.name }}</div>
+                    <div class="component-description">{{ prompt.description }}</div>
+                    <div>
+                        {% if prompt.is_async %}
+                        <span class="tag tag-async">async</span>
+                        {% endif %}
+                        {% if prompt.arguments %}
+                        <span class="tag tag-parameters">{{ prompt.arguments|length }} arguments</span>
+                        {% endif %}
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <div class="empty-message">No prompts registered.</div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <footer>
+        <p>Django-MCP {{ server_version }} • <a href="https://github.com/hyperbliss/django-mcp" class="footer-link">GitHub</a> • <a href="https://modelcontextprotocol.io" class="footer-link">MCP Documentation</a></p>
+    </footer>
+</body>
+</html> 
