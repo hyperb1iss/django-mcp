@@ -1,6 +1,7 @@
 import os
 from unittest.mock import MagicMock, patch
 
+import django
 from django.conf import settings
 from django.test import RequestFactory
 import pytest
@@ -10,54 +11,8 @@ def pytest_configure():
     """Configure Django settings for tests."""
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "tests.settings")
 
-    # Setup Django settings if not configured
+    # Initialize Django if not already set up
     if not settings.configured:
-        settings.configure(
-            INSTALLED_APPS=[
-                "django.contrib.contenttypes",
-                "django.contrib.auth",
-                "django.contrib.sessions",
-                "django.contrib.admin",
-                "django_mcp",
-                "tests",
-            ],
-            DATABASES={
-                "default": {
-                    "ENGINE": "django.db.backends.sqlite3",
-                    "NAME": ":memory:",
-                }
-            },
-            SECRET_KEY="django-insecure-test-key",
-            ROOT_URLCONF="tests.urls",
-            MIDDLEWARE=[
-                "django.middleware.security.SecurityMiddleware",
-                "django.contrib.sessions.middleware.SessionMiddleware",
-                "django.middleware.common.CommonMiddleware",
-                "django.middleware.csrf.CsrfViewMiddleware",
-                "django.contrib.auth.middleware.AuthenticationMiddleware",
-                "django.contrib.messages.middleware.MessageMiddleware",
-            ],
-            TEMPLATES=[
-                {
-                    "BACKEND": "django.template.backends.django.DjangoTemplates",
-                    "APP_DIRS": True,
-                    "OPTIONS": {
-                        "context_processors": [
-                            "django.template.context_processors.debug",
-                            "django.template.context_processors.request",
-                            "django.contrib.auth.context_processors.auth",
-                            "django.contrib.messages.context_processors.messages",
-                        ],
-                    },
-                },
-            ],
-            DJANGO_MCP_SERVER_NAME="Test MCP Server",
-            DJANGO_MCP_AUTO_DISCOVER=False,  # Disable auto-discovery for tests
-        )
-
-        # Initialize Django
-        import django
-
         django.setup()
 
 
@@ -91,11 +46,13 @@ def mock_mcp_server():
     mock_server.prompt = MagicMock(side_effect=mock_prompt_decorator)
 
     # Create a patch context for get_mcp_server
-    with patch("django_mcp.server.get_mcp_server", return_value=mock_server):
-        with patch("django_mcp.decorators.get_mcp_server", return_value=mock_server):
-            with patch("django_mcp.model_tools.get_mcp_server", return_value=mock_server):
-                with patch("django_mcp.drf_tools.get_mcp_server", return_value=mock_server):
-                    yield mock_server
+    with (
+        patch("django_mcp.server.get_mcp_server", return_value=mock_server),
+        patch("django_mcp.decorators.get_mcp_server", return_value=mock_server),
+        patch("django_mcp.model_tools.get_mcp_server", return_value=mock_server),
+        patch("django_mcp.drf_tools.get_mcp_server", return_value=mock_server),
+    ):
+        yield mock_server
 
 
 @pytest.fixture

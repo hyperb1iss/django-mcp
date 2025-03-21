@@ -1,5 +1,6 @@
-from django.urls import include, path
+"""URL configuration for tests."""
+
 
 urlpatterns = [
-    path("mcp/", include("django_mcp.urls")),
+    # Add test-specific URLs here if needed
 ]
